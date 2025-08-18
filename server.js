@@ -1,7 +1,11 @@
-const express =  require('express');
-const cors = require('cors');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import Stripe from 'stripe';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -163,5 +167,3 @@ app.listen(PORT, () => {
     console.log('✅ Stripe configured successfully');
   }
 });
-
-module.exports = app;

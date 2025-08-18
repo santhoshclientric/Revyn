@@ -8,6 +8,7 @@ export const reportTypes: ReportType[] = [
     price: 125,
     category: 'Marketing',
     estimatedTime: '15-20 minutes',
+    available: true,
     questions: [
       {
         id: 'website-url',
@@ -94,6 +95,7 @@ export const reportTypes: ReportType[] = [
     price: 125,
     category: 'Sales',
     estimatedTime: '12-15 minutes',
+    available: false,
     questions: [
       {
         id: 'sales-process',
@@ -167,6 +169,7 @@ export const reportTypes: ReportType[] = [
     price: 125,
     category: 'Finance',
     estimatedTime: '10-15 minutes',
+    available: false,
     questions: [
       {
         id: 'annual-revenue',
@@ -232,6 +235,7 @@ export const reportTypes: ReportType[] = [
     price: 125,
     category: 'Operations',
     estimatedTime: '12-18 minutes',
+    available: false,
     questions: [
       {
         id: 'business-type',
@@ -296,6 +300,7 @@ export const reportTypes: ReportType[] = [
     price: 125,
     category: 'HR',
     estimatedTime: '10-15 minutes',
+    available: false,
     questions: [
       {
         id: 'team-size',

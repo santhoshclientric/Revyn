@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { stripePromise } from '../config/stripe';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { StripeService, PaymentIntentData } from '../services/stripeService';
-import { CreditCard, Lock, ArrowLeft, CheckCircle, Loader, AlertCircle } from 'lucide-react';
+import { Lock, ArrowLeft, CheckCircle, Loader, AlertCircle } from 'lucide-react';
 
 interface PaymentFlowProps {
   reportIds: string[];
@@ -11,21 +11,6 @@ interface PaymentFlowProps {
   onPaymentComplete: (paymentIntentId: string) => void;
   onBack: () => void;
 }
-
-const cardElementOptions = {
-  style: {
-    base: {
-      fontSize: '16px',
-      color: '#424770',
-      '::placeholder': {
-        color: '#aab7c4',
-      },
-    },
-    invalid: {
-      color: '#9e2146',
-    },
-  },
-};
 
 const PaymentForm: React.FC<{
   reportIds: string[];
@@ -39,13 +24,6 @@ const PaymentForm: React.FC<{
   const [paymentData, setPaymentData] = useState({
     email: '',
     name: '',
-    billingAddress: {
-      line1: '',
-      city: '',
-      state: '',
-      postal_code: '',
-      country: 'US'
-    }
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -81,24 +59,12 @@ const PaymentForm: React.FC<{
     createPaymentIntent();
   }, [reportIds, total, paymentData.email, paymentData.name]);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
-    if (name.startsWith('billing.')) {
-      const field = name.split('.')[1];
-      setPaymentData(prev => ({
-        ...prev,
-        billingAddress: {
-          ...prev.billingAddress,
-          [field]: value
-        }
-      }));
-    } else {
-      setPaymentData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
+    setPaymentData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const validateForm = () => {
@@ -108,11 +74,6 @@ const PaymentForm: React.FC<{
     
     if (!stripe || !elements) {
       return 'Payment system not ready. Please wait a moment and try again.';
-    }
-    
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) {
-      return 'Card information is required';
     }
     
     return null;
@@ -136,27 +97,29 @@ const PaymentForm: React.FC<{
     setIsProcessing(true);
     
     try {
-      const result = await stripeService.confirmPayment(
-        clientSecret,
+      // Use the new confirmPayment method with Payment Element
+      const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
-        {
-          name: paymentData.name,
-          email: paymentData.email,
-          address: paymentData.billingAddress.line1 ? {
-            line1: paymentData.billingAddress.line1,
-            city: paymentData.billingAddress.city,
-            state: paymentData.billingAddress.state,
-            postal_code: paymentData.billingAddress.postal_code,
-            country: paymentData.billingAddress.country
-          } : undefined
-        }
-      );
+        confirmParams: {
+          return_url: `${window.location.origin}/payment-success`,
+          payment_method_data: {
+            billing_details: {
+              name: paymentData.name,
+              email: paymentData.email,
+            }
+          }
+        },
+        redirect: 'if_required'
+      });
 
-      if (result.success && result.paymentIntentId) {
-        console.log('Payment completed successfully:', result.paymentIntentId);
-        onPaymentComplete(result.paymentIntentId);
+      if (error) {
+        console.error('Payment confirmation error:', error);
+        setError(error.message || 'Payment failed. Please try again.');
+      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        console.log('Payment completed successfully:', paymentIntent.id);
+        onPaymentComplete(paymentIntent.id);
       } else {
-        setError(result.error || 'Payment failed. Please try again.');
+        setError('Payment was not completed. Please try again.');
       }
     } catch (error) {
       console.error('Payment error:', error);
@@ -207,82 +170,20 @@ const PaymentForm: React.FC<{
         />
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Card Information *
-        </label>
-        <div className="p-4 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-colors">
-          <CardElement options={cardElementOptions} />
-        </div>
-        <p className="text-xs text-gray-500 mt-1">
-          For testing: Use card number 4242 4242 4242 4242 with any future date and CVC
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Billing Address</h3>
-        
+      {/* Payment Element - only show when we have clientSecret */}
+      {clientSecret && (
         <div>
-          <label htmlFor="billing.line1" className="block text-sm font-medium text-gray-700 mb-2">
-            Address Line 1
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Payment Information *
           </label>
-          <input
-            type="text"
-            id="billing.line1"
-            name="billing.line1"
-            value={paymentData.billingAddress.line1}
-            onChange={handleInputChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-            placeholder="123 Main Street"
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="billing.city" className="block text-sm font-medium text-gray-700 mb-2">
-              City
-            </label>
-            <input
-              type="text"
-              id="billing.city"
-              name="billing.city"
-              value={paymentData.billingAddress.city}
-              onChange={handleInputChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-              placeholder="New York"
-            />
+          <div className="p-4 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-colors">
+            <PaymentElement />
           </div>
-          <div>
-            <label htmlFor="billing.state" className="block text-sm font-medium text-gray-700 mb-2">
-              State
-            </label>
-            <input
-              type="text"
-              id="billing.state"
-              name="billing.state"
-              value={paymentData.billingAddress.state}
-              onChange={handleInputChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-              placeholder="NY"
-            />
-          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            For testing: Use card number 4242 4242 4242 4242 with any future date and CVC
+          </p>
         </div>
-
-        <div>
-          <label htmlFor="billing.postal_code" className="block text-sm font-medium text-gray-700 mb-2">
-            Postal Code
-          </label>
-          <input
-            type="text"
-            id="billing.postal_code"
-            name="billing.postal_code"
-            value={paymentData.billingAddress.postal_code}
-            onChange={handleInputChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-            placeholder="10001"
-          />
-        </div>
-      </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4 pt-6">
         <button
@@ -323,8 +224,46 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
   onBack
 }) => {
   const selectedReports = reportTypes.filter(rt => reportIds.includes(rt.id));
-  const total = isBundle ? bundlePrice : reportIds.length * individualPrice;
-  const savings = isBundle ? (reportIds.length * individualPrice) - bundlePrice : 0;
+  const total = reportIds.length * individualPrice;
+  const [clientSecret, setClientSecret] = useState('');
+
+  // Create payment intent early to get clientSecret for Elements
+  useEffect(() => {
+    const createInitialPaymentIntent = async () => {
+      try {
+        const stripeService = StripeService.getInstance();
+        const paymentIntentData: PaymentIntentData = {
+          amount: total,
+          currency: 'usd',
+          reportIds,
+          customerEmail: 'temp@example.com', // Temporary - will be updated when form is filled
+          customerName: 'Temporary Customer'
+        };
+
+        const { clientSecret } = await stripeService.createPaymentIntent(paymentIntentData);
+        setClientSecret(clientSecret);
+      } catch (error) {
+        console.error('Error creating initial payment intent:', error);
+      }
+    };
+
+    createInitialPaymentIntent();
+  }, [reportIds, total]);
+
+  const stripeElementsOptions = {
+    clientSecret,
+    appearance: {
+      theme: 'stripe' as const,
+      variables: {
+        colorPrimary: '#3b82f6',
+        colorBackground: '#ffffff',
+        colorText: '#374151',
+        colorDanger: '#df1b41',
+        fontFamily: 'system-ui, sans-serif',
+        borderRadius: '8px',
+      }
+    }
+  };
 
   return (
     <div className="max-w-6xl mx-auto px-4">
@@ -333,44 +272,23 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Order Summary</h2>
           
-          {isBundle ? (
-            <div className="mb-6">
-              <div className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border border-blue-200">
+          <div className="space-y-4 mb-6">
+            {selectedReports.map((report) => (
+              <div key={report.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-xl">
                 <div>
-                  <h3 className="font-bold text-gray-900">Complete Business Health Bundle</h3>
-                  <p className="text-sm text-gray-600">All 5 reports + comprehensive overview</p>
+                  <h3 className="font-semibold text-gray-900">{report.name}</h3>
+                  <p className="text-sm text-gray-600">{report.estimatedTime}</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-xl font-bold text-gray-900">${bundlePrice}</div>
-                  <div className="text-sm text-green-600">Save ${savings}</div>
-                </div>
+                <div className="text-lg font-bold text-gray-900">${report.price}</div>
               </div>
-            </div>
-          ) : (
-            <div className="space-y-4 mb-6">
-              {selectedReports.map((report) => (
-                <div key={report.id} className="flex justify-between items-center p-4 border border-gray-200 rounded-xl">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{report.name}</h3>
-                    <p className="text-sm text-gray-600">{report.estimatedTime}</p>
-                  </div>
-                  <div className="text-lg font-bold text-gray-900">${report.price}</div>
-                </div>
-              ))}
-            </div>
-          )}
+            ))}
+          </div>
 
           <div className="border-t border-gray-200 pt-4">
             <div className="flex justify-between items-center mb-2">
               <span className="text-gray-600">Subtotal</span>
-              <span className="font-semibold">${isBundle ? bundlePrice : reportIds.length * individualPrice}</span>
+              <span className="font-semibold">${reportIds.length * individualPrice}</span>
             </div>
-            {isBundle && (
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-green-600">Bundle Savings</span>
-                <span className="font-semibold text-green-600">-${savings}</span>
-              </div>
-            )}
             <div className="flex justify-between items-center text-xl font-bold text-gray-900 pt-2 border-t border-gray-200">
               <span>Total</span>
               <span>${total}</span>
@@ -389,15 +307,24 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Payment Information</h2>
           
-          <Elements stripe={stripePromise}>
-            <PaymentForm
-              reportIds={reportIds}
-              isBundle={isBundle}
-              total={total}
-              onPaymentComplete={onPaymentComplete}
-              onBack={onBack}
-            />
-          </Elements>
+          {clientSecret ? (
+            <Elements stripe={stripePromise} options={stripeElementsOptions}>
+              <PaymentForm
+                reportIds={reportIds}
+                isBundle={isBundle}
+                total={total}
+                onPaymentComplete={onPaymentComplete}
+                onBack={onBack}
+              />
+            </Elements>
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <Loader className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                <p className="text-gray-600">Initializing payment...</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

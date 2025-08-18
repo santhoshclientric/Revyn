@@ -1,17 +1,27 @@
 import React, { useState } from 'react';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { ReportType } from '../types/reports';
-import { ShoppingCart, Check, Star, Clock, DollarSign } from 'lucide-react';
+import { ShoppingCart, Check, Star, Clock, DollarSign, Lock, Mail, Bell } from 'lucide-react';
 
 interface ReportSelectionProps {
   onSelectReports: (reportIds: string[], isBundle: boolean) => void;
 }
 
 export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReports }) => {
+  const availableReports = reportTypes.filter(rt => rt.available);
+  const comingSoonReports = reportTypes.filter(rt => !rt.available);
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
   const [isBundle, setIsBundle] = useState(false);
+  const [showWaitlistModal, setShowWaitlistModal] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState('');
 
   const handleReportToggle = (reportId: string) => {
+    const report = reportTypes.find(rt => rt.id === reportId);
+    if (!report?.available) {
+      setShowWaitlistModal(true);
+      return;
+    }
+    
     setSelectedReports(prev => {
       if (prev.includes(reportId)) {
         return prev.filter(id => id !== reportId);
@@ -23,16 +33,23 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
   };
 
   const handleBundleSelect = () => {
-    setSelectedReports(reportTypes.map(rt => rt.id));
-    setIsBundle(true);
+    setSelectedReports(availableReports.map(rt => rt.id));
+    setIsBundle(false); // Disable bundle for v1
   };
 
   const calculateTotal = () => {
-    if (isBundle) return bundlePrice;
     return selectedReports.length * individualPrice;
   };
 
-  const savings = selectedReports.length * individualPrice - bundlePrice;
+  const handleWaitlistSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    // In production, save to database
+    console.log('Waitlist signup:', waitlistEmail);
+    setWaitlistEmail('');
+    setShowWaitlistModal(false);
+    // Show success message
+    alert('Thanks! We\'ll notify you when this report becomes available.');
+  };
 
   return (
     <div className="py-16 px-4">
@@ -47,45 +64,16 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
           </p>
         </div>
 
-        {/* Bundle Option */}
+        {/* Available Reports */}
         <div className="mb-12">
-          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl p-8 text-white relative overflow-hidden">
-            <div className="absolute top-4 right-4">
-              <div className="bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-sm font-bold">
-                BEST VALUE
-              </div>
-            </div>
-            <div className="flex flex-col lg:flex-row items-center justify-between">
-              <div className="mb-6 lg:mb-0">
-                <h2 className="text-3xl font-bold mb-4">Complete Business Health Bundle</h2>
-                <p className="text-blue-100 mb-4">
-                  Get all 5 reports plus a comprehensive business overview report
-                </p>
-                <div className="flex items-center space-x-4">
-                  <span className="text-4xl font-bold">${bundlePrice}</span>
-                  <span className="text-blue-200 line-through text-xl">${reportTypes.length * individualPrice}</span>
-                  <span className="bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-sm font-bold">
-                    Save ${savings}
-                  </span>
-                </div>
-              </div>
-              <button
-                onClick={handleBundleSelect}
-                className="bg-white text-blue-600 px-8 py-4 rounded-xl font-bold hover:bg-gray-100 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                Select Bundle
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Individual Reports */}
-        <div className="mb-12">
-          <h2 className="text-3xl font-bold text-center text-gray-900 mb-8">
-            Or Choose Individual Reports
+          <h2 className="text-3xl font-bold text-center text-gray-900 mb-2">
+            Available Now
           </h2>
+          <p className="text-center text-gray-600 mb-8">
+            Get started with our comprehensive marketing analysis
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {reportTypes.map((report) => (
+            {availableReports.map((report) => (
               <div
                 key={report.id}
                 className={`bg-white rounded-2xl shadow-xl p-8 border-2 transition-all duration-200 cursor-pointer ${
@@ -135,19 +123,83 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
           </div>
         </div>
 
+        {/* Coming Soon Reports */}
+        <div className="mb-12">
+          <h2 className="text-3xl font-bold text-center text-gray-900 mb-2">
+            Coming Soon
+          </h2>
+          <p className="text-center text-gray-600 mb-8">
+            More comprehensive business reports launching soon
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {comingSoonReports.map((report) => (
+              <div
+                key={report.id}
+                className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 relative overflow-hidden cursor-pointer hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-200"
+                onClick={() => setShowWaitlistModal(true)}
+              >
+                {/* Coming Soon Overlay */}
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-50/90 to-gray-100/90 backdrop-blur-sm flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full mb-4 mx-auto w-fit">
+                      <Lock className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-bold mb-2">
+                      COMING SOON
+                    </div>
+                    <button className="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors text-sm">
+                      Join Waitlist
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="opacity-60">
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="p-3 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl">
+                      <Star className="w-8 h-8 text-blue-600" />
+                    </div>
+                  </div>
+                  
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">
+                    {report.name}
+                  </h3>
+                  
+                  <p className="text-gray-600 mb-6 leading-relaxed">
+                    {report.description}
+                  </p>
+                  
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center text-sm text-gray-500">
+                      <Clock className="w-4 h-4 mr-2" />
+                      {report.estimatedTime}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      ${report.price}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center">
+                    <span className="text-2xl font-bold text-gray-900">
+                      ${report.price}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Checkout Section */}
         {selectedReports.length > 0 && (
           <div className="bg-white rounded-2xl shadow-2xl p-8 sticky bottom-4">
             <div className="flex flex-col lg:flex-row items-center justify-between">
               <div className="mb-4 lg:mb-0">
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                  {isBundle ? 'Complete Bundle' : `${selectedReports.length} Report${selectedReports.length > 1 ? 's' : ''} Selected`}
+                  {`${selectedReports.length} Report${selectedReports.length > 1 ? 's' : ''} Selected`}
                 </h3>
                 <p className="text-gray-600">
-                  {isBundle 
-                    ? 'All 5 reports + comprehensive overview'
-                    : `${selectedReports.map(id => reportTypes.find(rt => rt.id === id)?.name).join(', ')}`
-                  }
+                  {selectedReports.map(id => reportTypes.find(rt => rt.id === id)?.name).join(', ')}
                 </p>
               </div>
               
@@ -156,21 +208,73 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                   <div className="text-3xl font-bold text-gray-900">
                     ${calculateTotal()}
                   </div>
-                  {isBundle && (
-                    <div className="text-sm text-green-600 font-medium">
-                      You save ${savings}!
-                    </div>
-                  )}
                 </div>
                 
                 <button
-                  onClick={() => onSelectReports(selectedReports, isBundle)}
+                  onClick={() => onSelectReports(selectedReports, false)}
                   className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center"
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
                   Proceed to Checkout
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Waitlist Modal */}
+        {showWaitlistModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+              <div className="text-center mb-6">
+                <div className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full mx-auto w-fit mb-4">
+                  <Bell className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  Join the Waitlist
+                </h3>
+                <p className="text-gray-600">
+                  Be the first to know when this report becomes available!
+                </p>
+              </div>
+              
+              <form onSubmit={handleWaitlistSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="waitlist-email" className="block text-sm font-medium text-gray-700 mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Mail className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="waitlist-email"
+                      type="email"
+                      value={waitlistEmail}
+                      onChange={(e) => setWaitlistEmail(e.target.value)}
+                      required
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+                      placeholder="your@email.com"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowWaitlistModal(false)}
+                    className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    Join Waitlist
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

@@ -5,6 +5,7 @@ export interface ReportType {
   price: number;
   category: string;
   estimatedTime: string;
+  available: boolean;
   questions: ReportQuestion[];
 }
 
