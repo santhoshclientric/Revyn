@@ -20,13 +20,11 @@ const cardElementOptions = {
       '::placeholder': {
         color: '#aab7c4',
       },
-      padding: '12px',
     },
     invalid: {
       color: '#9e2146',
     },
   },
-  hidePostalCode: false,
 };
 
 const PaymentForm: React.FC<{
@@ -56,26 +54,32 @@ const PaymentForm: React.FC<{
   const stripeService = StripeService.getInstance();
 
   useEffect(() => {
-    // Create payment intent when component mounts
+    // Create payment intent when we have customer data
     const createPaymentIntent = async () => {
+      if (!paymentData.email || !paymentData.name) {
+        return; // Wait for customer data
+      }
+
       try {
         const paymentIntentData: PaymentIntentData = {
-          amount: total,
+          amount: total, // This will be converted to cents in the service
           currency: 'usd',
           reportIds,
-          customerEmail: paymentData.email || 'customer@example.com',
-          customerName: paymentData.name || 'Customer'
+          customerEmail: paymentData.email,
+          customerName: paymentData.name
         };
 
         const { clientSecret } = await stripeService.createPaymentIntent(paymentIntentData);
         setClientSecret(clientSecret);
+        setError(''); // Clear any previous errors
       } catch (error) {
-        setError('Failed to initialize payment. Please try again.');
+        console.error('Payment intent creation error:', error);
+        setError(error instanceof Error ? error.message : 'Failed to initialize payment. Please try again.');
       }
     };
 
     createPaymentIntent();
-  }, [reportIds, total]);
+  }, [reportIds, total, paymentData.email, paymentData.name]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -149,12 +153,14 @@ const PaymentForm: React.FC<{
       );
 
       if (result.success && result.paymentIntentId) {
+        console.log('Payment completed successfully:', result.paymentIntentId);
         onPaymentComplete(result.paymentIntentId);
       } else {
         setError(result.error || 'Payment failed. Please try again.');
       }
     } catch (error) {
-      setError('An error occurred processing your payment. Please try again.');
+      console.error('Payment error:', error);
+      setError(error instanceof Error ? error.message : 'Payment failed. Please try again.');
     } finally {
       setIsProcessing(false);
     }
@@ -208,6 +214,9 @@ const PaymentForm: React.FC<{
         <div className="p-4 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-colors">
           <CardElement options={cardElementOptions} />
         </div>
+        <p className="text-xs text-gray-500 mt-1">
+          For testing: Use card number 4242 4242 4242 4242 with any future date and CVC
+        </p>
       </div>
 
       <div className="space-y-4">

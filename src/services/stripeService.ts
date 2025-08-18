@@ -18,6 +18,11 @@ export interface PaymentResult {
 export class StripeService {
   private static instance: StripeService;
   private stripe: Stripe | null = null;
+  private apiUrl: string;
+  
+  constructor() {
+    this.apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  }
   
   static getInstance(): StripeService {
     if (!StripeService.instance) {
@@ -35,46 +40,33 @@ export class StripeService {
 
   async createPaymentIntent(data: PaymentIntentData): Promise<{ clientSecret: string; paymentIntentId: string }> {
     try {
-      // In production, this would call your backend API
-      // For now, we'll simulate the API call
-      const response = await fetch('/api/create-payment-intent', {
+      const response = await fetch(`${this.apiUrl}/api/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          amount: data.amount * 100, // Convert to cents
+          amount: Math.round(data.amount * 100), // Convert to cents
           currency: data.currency,
           reportIds: data.reportIds,
           customerEmail: data.customerEmail,
-          customerName: data.customerName,
-          metadata: {
-            reportIds: data.reportIds.join(','),
-            isBundle: data.reportIds.length > 1
-          }
+          customerName: data.customerName
         }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create payment intent');
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
       }
 
-      const { client_secret, payment_intent_id } = await response.json();
-      
+      const result = await response.json();
       return {
-        clientSecret: client_secret,
-        paymentIntentId: payment_intent_id
+        clientSecret: result.clientSecret,
+        paymentIntentId: result.paymentIntentId
       };
     } catch (error) {
-      // Fallback for development - simulate payment intent creation
-      console.warn('Using simulated payment intent for development');
-      const simulatedPaymentIntentId = `pi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      const simulatedClientSecret = `${simulatedPaymentIntentId}_secret_${Math.random().toString(36).substr(2, 9)}`;
-      
-      return {
-        clientSecret: simulatedClientSecret,
-        paymentIntentId: simulatedPaymentIntentId
-      };
+      console.error('Error creating payment intent:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to create payment intent');
     }
   }
 
@@ -116,6 +108,7 @@ export class StripeService {
       });
 
       if (error) {
+        console.error('Payment confirmation error:', error);
         return { success: false, error: error.message };
       }
 
@@ -128,6 +121,7 @@ export class StripeService {
 
       return { success: false, error: 'Payment was not completed' };
     } catch (error) {
+      console.error('Payment confirmation exception:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'An unexpected error occurred' 
@@ -136,11 +130,24 @@ export class StripeService {
   }
 
   async retrievePaymentIntent(paymentIntentId: string) {
-    const stripe = await this.initialize();
-    if (!stripe) {
-      throw new Error('Stripe failed to initialize');
-    }
+    try {
+      const response = await fetch(`${this.apiUrl}/api/payment-intent/${paymentIntentId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-    return stripe.retrievePaymentIntent(paymentIntentId);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      }
+
+      const paymentIntent = await response.json();
+      return { paymentIntent };
+    } catch (error) {
+      console.error('Error retrieving payment intent:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to retrieve payment intent');
+    }
   }
 }

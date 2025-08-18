@@ -66,8 +66,13 @@ app.post('/api/create-payment-intent', async (req, res) => {
 
 ### 4. Development Mode
 
-For development, the app includes fallback simulation for payment processing when the backend is not available.
+For development, the app includes fallback simulation for payment processing when the backend is not available. The payment flow will simulate successful transactions for testing purposes.
 
+**Test Card Information:**
+- Card Number: 4242 4242 4242 4242
+- Expiry: Any future date
+- CVC: Any 3 digits
+- Postal Code: Any valid postal code
 ```bash
 npm run dev
 ```

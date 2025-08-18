@@ -21,7 +21,7 @@ export const PaymentSuccess: React.FC = () => {
       try {
         const result = await stripeService.retrievePaymentIntent(paymentIntentId);
         
-        if (result.paymentIntent?.status === 'succeeded') {
+        if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
           setPaymentDetails(result.paymentIntent);
           setPaymentStatus('success');
         } else {
@@ -34,7 +34,7 @@ export const PaymentSuccess: React.FC = () => {
     };
 
     verifyPayment();
-  }, [paymentIntentId]);
+  }, [paymentIntentId, stripeService]);
 
   if (paymentStatus === 'loading') {
     return (
