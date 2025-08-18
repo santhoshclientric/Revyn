@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { stripePromise } from '../config/stripe';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
-import { StripeService } from '../services/stripeService';
-import { CreditCard, Lock, ArrowLeft, CheckCircle, Loader } from 'lucide-react';
+import { StripeService, PaymentIntentData } from '../services/stripeService';
+import { CreditCard, Lock, ArrowLeft, CheckCircle, Loader, AlertCircle } from 'lucide-react';
 
 interface PaymentFlowProps {
   reportIds: string[];
@@ -10,33 +12,70 @@ interface PaymentFlowProps {
   onBack: () => void;
 }
 
-export const PaymentFlow: React.FC<PaymentFlowProps> = ({
-  reportIds,
-  isBundle,
-  onPaymentComplete,
-  onBack
-}) => {
+const cardElementOptions = {
+  style: {
+    base: {
+      fontSize: '16px',
+      color: '#424770',
+      '::placeholder': {
+        color: '#aab7c4',
+      },
+      padding: '12px',
+    },
+    invalid: {
+      color: '#9e2146',
+    },
+  },
+  hidePostalCode: false,
+};
+
+const PaymentForm: React.FC<{
+  reportIds: string[];
+  isBundle: boolean;
+  total: number;
+  onPaymentComplete: (paymentIntentId: string) => void;
+  onBack: () => void;
+}> = ({ reportIds, isBundle, total, onPaymentComplete, onBack }) => {
+  const stripe = useStripe();
+  const elements = useElements();
   const [paymentData, setPaymentData] = useState({
     email: '',
-    cardNumber: '',
-    expiryDate: '',
-    cvv: '',
     name: '',
     billingAddress: {
       line1: '',
       city: '',
       state: '',
-      postalCode: '',
+      postal_code: '',
       country: 'US'
     }
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
 
   const stripeService = StripeService.getInstance();
-  const selectedReports = reportTypes.filter(rt => reportIds.includes(rt.id));
-  const total = isBundle ? bundlePrice : reportIds.length * individualPrice;
-  const savings = isBundle ? (reportIds.length * individualPrice) - bundlePrice : 0;
+
+  useEffect(() => {
+    // Create payment intent when component mounts
+    const createPaymentIntent = async () => {
+      try {
+        const paymentIntentData: PaymentIntentData = {
+          amount: total,
+          currency: 'usd',
+          reportIds,
+          customerEmail: paymentData.email || 'customer@example.com',
+          customerName: paymentData.name || 'Customer'
+        };
+
+        const { clientSecret } = await stripeService.createPaymentIntent(paymentIntentData);
+        setClientSecret(clientSecret);
+      } catch (error) {
+        setError('Failed to initialize payment. Please try again.');
+      }
+    };
+
+    createPaymentIntent();
+  }, [reportIds, total]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -58,51 +97,18 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
     }
   };
 
-  const formatCardNumber = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    const matches = v.match(/\d{4,16}/g);
-    const match = matches && matches[0] || '';
-    const parts = [];
-    for (let i = 0, len = match.length; i < len; i += 4) {
-      parts.push(match.substring(i, i + 4));
-    }
-    if (parts.length) {
-      return parts.join(' ');
-    } else {
-      return v;
-    }
-  };
-
-  const formatExpiryDate = (value: string) => {
-    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
-    if (v.length >= 2) {
-      return v.substring(0, 2) + '/' + v.substring(2, 4);
-    }
-    return v;
-  };
-
-  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatCardNumber(e.target.value);
-    setPaymentData(prev => ({ ...prev, cardNumber: formatted }));
-  };
-
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatExpiryDate(e.target.value);
-    setPaymentData(prev => ({ ...prev, expiryDate: formatted }));
-  };
-
   const validateForm = () => {
-    if (!paymentData.email || !paymentData.cardNumber || !paymentData.expiryDate || 
-        !paymentData.cvv || !paymentData.name) {
+    if (!paymentData.email || !paymentData.name) {
       return 'Please fill in all required fields';
     }
     
-    if (paymentData.cardNumber.replace(/\s/g, '').length < 13) {
-      return 'Please enter a valid card number';
+    if (!stripe || !elements) {
+      return 'Payment system not ready. Please wait a moment and try again.';
     }
     
-    if (paymentData.cvv.length < 3) {
-      return 'Please enter a valid CVV';
+    const cardElement = elements.getElement(CardElement);
+    if (!cardElement) {
+      return 'Card information is required';
     }
     
     return null;
@@ -118,22 +124,34 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
       return;
     }
 
+    if (!stripe || !elements || !clientSecret) {
+      setError('Payment system not ready. Please try again.');
+      return;
+    }
+
     setIsProcessing(true);
     
     try {
-      // Create payment intent
-      const paymentIntentId = await stripeService.createPaymentIntent(total * 100, reportIds);
-      
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Confirm payment
-      const success = await stripeService.confirmPayment(paymentIntentId);
-      
-      if (success) {
-        onPaymentComplete(paymentIntentId);
+      const result = await stripeService.confirmPayment(
+        clientSecret,
+        elements,
+        {
+          name: paymentData.name,
+          email: paymentData.email,
+          address: paymentData.billingAddress.line1 ? {
+            line1: paymentData.billingAddress.line1,
+            city: paymentData.billingAddress.city,
+            state: paymentData.billingAddress.state,
+            postal_code: paymentData.billingAddress.postal_code,
+            country: paymentData.billingAddress.country
+          } : undefined
+        }
+      );
+
+      if (result.success && result.paymentIntentId) {
+        onPaymentComplete(result.paymentIntentId);
       } else {
-        setError('Payment failed. Please try again.');
+        setError(result.error || 'Payment failed. Please try again.');
       }
     } catch (error) {
       setError('An error occurred processing your payment. Please try again.');
@@ -141,6 +159,163 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
       setIsProcessing(false);
     }
   };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center">
+          <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+          Email Address *
+        </label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          value={paymentData.email}
+          onChange={handleInputChange}
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+          placeholder="your@email.com"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+          Full Name *
+        </label>
+        <input
+          type="text"
+          id="name"
+          name="name"
+          value={paymentData.name}
+          onChange={handleInputChange}
+          required
+          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+          placeholder="John Doe"
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Card Information *
+        </label>
+        <div className="p-4 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-colors">
+          <CardElement options={cardElementOptions} />
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-gray-900">Billing Address</h3>
+        
+        <div>
+          <label htmlFor="billing.line1" className="block text-sm font-medium text-gray-700 mb-2">
+            Address Line 1
+          </label>
+          <input
+            type="text"
+            id="billing.line1"
+            name="billing.line1"
+            value={paymentData.billingAddress.line1}
+            onChange={handleInputChange}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+            placeholder="123 Main Street"
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="billing.city" className="block text-sm font-medium text-gray-700 mb-2">
+              City
+            </label>
+            <input
+              type="text"
+              id="billing.city"
+              name="billing.city"
+              value={paymentData.billingAddress.city}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              placeholder="New York"
+            />
+          </div>
+          <div>
+            <label htmlFor="billing.state" className="block text-sm font-medium text-gray-700 mb-2">
+              State
+            </label>
+            <input
+              type="text"
+              id="billing.state"
+              name="billing.state"
+              value={paymentData.billingAddress.state}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+              placeholder="NY"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label htmlFor="billing.postal_code" className="block text-sm font-medium text-gray-700 mb-2">
+            Postal Code
+          </label>
+          <input
+            type="text"
+            id="billing.postal_code"
+            name="billing.postal_code"
+            value={paymentData.billingAddress.postal_code}
+            onChange={handleInputChange}
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
+            placeholder="10001"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4 pt-6">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back
+        </button>
+        
+        <button
+          type="submit"
+          disabled={isProcessing || !stripe || !clientSecret}
+          className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200 flex items-center justify-center"
+        >
+          {isProcessing ? (
+            <>
+              <Loader className="w-4 h-4 mr-2 animate-spin" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Complete Purchase ${total}
+            </>
+          )}
+        </button>
+      </div>
+    </form>
+  );
+};
+
+export const PaymentFlow: React.FC<PaymentFlowProps> = ({
+  reportIds,
+  isBundle,
+  onPaymentComplete,
+  onBack
+}) => {
+  const selectedReports = reportTypes.filter(rt => reportIds.includes(rt.id));
+  const total = isBundle ? bundlePrice : reportIds.length * individualPrice;
+  const savings = isBundle ? (reportIds.length * individualPrice) - bundlePrice : 0;
 
   return (
     <div className="max-w-6xl mx-auto px-4">
@@ -205,194 +380,15 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Payment Information</h2>
           
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address *
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={paymentData.email}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="your@email.com"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Cardholder Name *
-              </label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={paymentData.name}
-                onChange={handleInputChange}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                placeholder="John Doe"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="cardNumber" className="block text-sm font-medium text-gray-700 mb-2">
-                Card Number *
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  id="cardNumber"
-                  name="cardNumber"
-                  value={paymentData.cardNumber}
-                  onChange={handleCardNumberChange}
-                  required
-                  maxLength={19}
-                  className="w-full px-4 py-3 pl-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="1234 5678 9012 3456"
-                />
-                <CreditCard className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  Expiry Date *
-                </label>
-                <input
-                  type="text"
-                  id="expiryDate"
-                  name="expiryDate"
-                  value={paymentData.expiryDate}
-                  onChange={handleExpiryChange}
-                  required
-                  maxLength={5}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="MM/YY"
-                />
-              </div>
-              <div>
-                <label htmlFor="cvv" className="block text-sm font-medium text-gray-700 mb-2">
-                  CVV *
-                </label>
-                <input
-                  type="text"
-                  id="cvv"
-                  name="cvv"
-                  value={paymentData.cvv}
-                  onChange={handleInputChange}
-                  required
-                  maxLength={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="123"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-gray-900">Billing Address</h3>
-              
-              <div>
-                <label htmlFor="billing.line1" className="block text-sm font-medium text-gray-700 mb-2">
-                  Address Line 1
-                </label>
-                <input
-                  type="text"
-                  id="billing.line1"
-                  name="billing.line1"
-                  value={paymentData.billingAddress.line1}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="123 Main Street"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="billing.city" className="block text-sm font-medium text-gray-700 mb-2">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    id="billing.city"
-                    name="billing.city"
-                    value={paymentData.billingAddress.city}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                    placeholder="New York"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="billing.state" className="block text-sm font-medium text-gray-700 mb-2">
-                    State
-                  </label>
-                  <input
-                    type="text"
-                    id="billing.state"
-                    name="billing.state"
-                    value={paymentData.billingAddress.state}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                    placeholder="NY"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="billing.postalCode" className="block text-sm font-medium text-gray-700 mb-2">
-                  Postal Code
-                </label>
-                <input
-                  type="text"
-                  id="billing.postalCode"
-                  name="billing.postalCode"
-                  value={paymentData.billingAddress.postalCode}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
-                  placeholder="10001"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4 pt-6">
-              <button
-                type="button"
-                onClick={onBack}
-                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back
-              </button>
-              
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all duration-200 flex items-center justify-center"
-              >
-                {isProcessing ? (
-                  <>
-                    <Loader className="w-4 h-4 mr-2 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Complete Purchase ${total}
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+          <Elements stripe={stripePromise}>
+            <PaymentForm
+              reportIds={reportIds}
+              isBundle={isBundle}
+              total={total}
+              onPaymentComplete={onPaymentComplete}
+              onBack={onBack}
+            />
+          </Elements>
         </div>
       </div>
     </div>

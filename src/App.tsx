@@ -6,6 +6,7 @@ import { ReportsDashboard } from './components/ReportsDashboard';
 import { About } from './components/About';
 import { Contact } from './components/Contact';
 import { Login } from './components/Login';
+import { PaymentSuccess } from './components/PaymentSuccess';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
               <Route path="/about" element={<About />} />
               <Route path="/contact" element={<Contact />} />
               <Route path="/login" element={<Login />} />
+              <Route path="/payment-success" element={<PaymentSuccess />} />
             </Routes>
           </main>
           <Footer />
