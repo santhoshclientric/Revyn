@@ -6,15 +6,45 @@ import { useAuth } from '../contexts/AuthContext';
 export const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, signOut, loading } = useAuth();
 
   const navigation = [
-    { name: 'Home', href: '/' },
+    { name: 'Home', href: '/', public: true },
     { name: 'About', href: '/about' },
     { name: 'Contact', href: '/contact' },
+    { name: 'Dashboard', href: '/dashboard', protected: true },
   ];
 
+  const filteredNavigation = navigation.filter(item => {
+    if (item.protected && !user) return false;
+    if (item.public === false && !user) return false;
+    return true;
+  });
+
   const isActive = (path: string) => location.pathname === path;
+
+  if (loading) {
+    return (
+      <header className="bg-white/80 backdrop-blur-md shadow-lg border-b border-white/20 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-4">
+            <Link to="/" className="flex items-center group">
+              <div className="p-2 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl mr-3 group-hover:scale-105 transition-transform">
+                <Brain className="w-8 h-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  Revyn
+                </h1>
+                <p className="text-xs text-gray-500 -mt-1">Marketing AI</p>
+              </div>
+            </Link>
+            <div className="animate-pulse bg-gray-200 h-8 w-20 rounded"></div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="bg-white/80 backdrop-blur-md shadow-lg border-b border-white/20 sticky top-0 z-50">
@@ -35,7 +65,7 @@ export const Header: React.FC = () => {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            {navigation.map((item) => (
+            {filteredNavigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
@@ -56,10 +86,12 @@ export const Header: React.FC = () => {
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2 px-3 py-2 bg-gray-100 rounded-lg">
                   <User className="w-4 h-4 text-gray-600" />
-                  <span className="text-sm font-medium text-gray-700">{user.name}</span>
+                  <span className="text-sm font-medium text-gray-700">
+                    {user.user_metadata?.name || user.email?.split('@')[0]}
+                  </span>
                 </div>
                 <button
-                  onClick={logout}
+                  onClick={signOut}
                   className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="Logout"
                 >
@@ -89,7 +121,7 @@ export const Header: React.FC = () => {
         {isMenuOpen && (
           <div className="md:hidden py-4 border-t border-gray-200">
             <div className="space-y-2">
-              {navigation.map((item) => (
+              {filteredNavigation.map((item) => (
                 <Link
                   key={item.name}
                   to={item.href}
@@ -106,11 +138,11 @@ export const Header: React.FC = () => {
               {user ? (
                 <div className="pt-2 border-t border-gray-200">
                   <div className="px-4 py-2 text-sm text-gray-600">
-                    Signed in as {user.name}
+                    Signed in as {user.user_metadata?.name || user.email?.split('@')[0]}
                   </div>
                   <button
                     onClick={() => {
-                      logout();
+                      signOut();
                       setIsMenuOpen(false);
                     }}
                     className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg font-medium"

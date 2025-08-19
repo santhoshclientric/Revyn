@@ -1,16 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { stripePromise } from '../config/stripe';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { StripeService, PaymentIntentData } from '../services/stripeService';
 import { Lock, ArrowLeft, CheckCircle, Loader, AlertCircle } from 'lucide-react';
-
-interface PaymentFlowProps {
-  reportIds: string[];
-  isBundle: boolean;
-  onPaymentComplete: (paymentIntentId: string) => void;
-  onBack: () => void;
-}
 
 const PaymentForm: React.FC<{
   reportIds: string[];
@@ -217,15 +211,28 @@ const PaymentForm: React.FC<{
   );
 };
 
-export const PaymentFlow: React.FC<PaymentFlowProps> = ({
-  reportIds,
-  isBundle,
-  onPaymentComplete,
-  onBack
-}) => {
+export const PaymentFlow: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { reportIds, isBundle } = location.state || { reportIds: [], isBundle: false };
   const selectedReports = reportTypes.filter(rt => reportIds.includes(rt.id));
   const total = reportIds.length * individualPrice;
   const [clientSecret, setClientSecret] = useState('');
+
+  // Handler functions for the PaymentForm component
+  const handlePaymentSuccess = (paymentIntentId: string) => {
+    navigate('/payment-success', {
+      state: {
+        paymentIntentId,
+        reportIds,
+        isBundle
+      }
+    });
+  };
+
+  const handleGoBack = () => {
+    navigate('/reports');
+  };
 
   // Create payment intent early to get clientSecret for Elements
   useEffect(() => {
@@ -313,8 +320,8 @@ export const PaymentFlow: React.FC<PaymentFlowProps> = ({
                 reportIds={reportIds}
                 isBundle={isBundle}
                 total={total}
-                onPaymentComplete={onPaymentComplete}
-                onBack={onBack}
+                onPaymentComplete={handlePaymentSuccess}
+                onBack={handleGoBack}
               />
             </Elements>
           ) : (

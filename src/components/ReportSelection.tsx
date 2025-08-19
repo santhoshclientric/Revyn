@@ -1,19 +1,49 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { ReportType } from '../types/reports';
-import { ShoppingCart, Check, Star, Clock, DollarSign, Lock, Mail, Bell } from 'lucide-react';
+import { ShoppingCart, Check, Star, Clock, DollarSign, Lock, Mail, Bell, User } from 'lucide-react';
 
 interface ReportSelectionProps {
   onSelectReports: (reportIds: string[], isBundle: boolean) => void;
+  user?: any; // You can replace with proper User type from your auth context
 }
 
-export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReports }) => {
+interface StoredSelection {
+  reportIds: string[];
+  isBundle: boolean;
+  timestamp: number;
+}
+
+export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReports, user }) => {
   const availableReports = reportTypes.filter(rt => rt.available);
   const comingSoonReports = reportTypes.filter(rt => !rt.available);
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
   const [isBundle, setIsBundle] = useState(false);
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [waitlistEmail, setWaitlistEmail] = useState('');
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+
+  // Load any existing selection from localStorage on mount
+  useEffect(() => {
+    const storedSelection = localStorage.getItem('selectedReports');
+    if (storedSelection && !user) {
+      try {
+        const { reportIds, isBundle: storedIsBundle, timestamp }: StoredSelection = JSON.parse(storedSelection);
+        
+        // Check if selection is recent (within 1 hour)
+        if (Date.now() - timestamp < 3600000) {
+          setSelectedReports(reportIds);
+          setIsBundle(storedIsBundle);
+        } else {
+          // Clear expired selection
+          localStorage.removeItem('selectedReports');
+        }
+      } catch (error) {
+        console.error('Error parsing stored selection:', error);
+        localStorage.removeItem('selectedReports');
+      }
+    }
+  }, [user]);
 
   const handleReportToggle = (reportId: string) => {
     const report = reportTypes.find(rt => rt.id === reportId);
@@ -23,22 +53,67 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
     }
     
     setSelectedReports(prev => {
-      if (prev.includes(reportId)) {
-        return prev.filter(id => id !== reportId);
-      } else {
-        return [...prev, reportId];
+      const newSelection = prev.includes(reportId)
+        ? prev.filter(id => id !== reportId)
+        : [...prev, reportId];
+      
+      // If user is not logged in, store the selection
+      if (!user && newSelection.length > 0) {
+        const selectionData: StoredSelection = {
+          reportIds: newSelection,
+          isBundle: false,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('selectedReports', JSON.stringify(selectionData));
+      } else if (!user && newSelection.length === 0) {
+        localStorage.removeItem('selectedReports');
       }
+      
+      return newSelection;
     });
     setIsBundle(false);
   };
 
   const handleBundleSelect = () => {
-    setSelectedReports(availableReports.map(rt => rt.id));
+    const allReportIds = availableReports.map(rt => rt.id);
+    setSelectedReports(allReportIds);
     setIsBundle(false); // Disable bundle for v1
+    
+    // If user is not logged in, store the selection
+    if (!user) {
+      const selectionData: StoredSelection = {
+        reportIds: allReportIds,
+        isBundle: false,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('selectedReports', JSON.stringify(selectionData));
+    }
   };
 
   const calculateTotal = () => {
     return selectedReports.length * individualPrice;
+  };
+
+  const handleCheckout = () => {
+    if (selectedReports.length === 0) return;
+    
+    // Always call onSelectReports - it will handle the login flow internally
+    if (typeof onSelectReports === 'function') {
+      onSelectReports(selectedReports, false);
+    } else {
+      console.error('onSelectReports is not available');
+    }
+  };
+
+  const handleLoginPromptConfirm = () => {
+    setShowLoginPrompt(false);
+    // Just call the regular checkout flow
+    handleCheckout();
+  };
+
+  const handleLoginPromptCancel = () => {
+    setShowLoginPrompt(false);
+    // Keep the selection but don't proceed
   };
 
   const handleWaitlistSubmit = (e: React.FormEvent) => {
@@ -62,12 +137,27 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
             Get AI-powered insights and actionable recommendations to transform your business performance.
           </p>
+          
+          {/* User status indicator */}
+          <div className="mt-4 flex justify-center">
+            {user ? (
+              <div className="flex items-center text-green-600 bg-green-50 px-4 py-2 rounded-full">
+                <User className="w-4 h-4 mr-2" />
+                <span className="text-sm font-medium">Logged in as {user.email}</span>
+              </div>
+            ) : (
+              <div className="flex items-center text-orange-600 bg-orange-50 px-4 py-2 rounded-full">
+                <User className="w-4 h-4 mr-2" />
+                <span className="text-sm font-medium">Please log in to complete purchase</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Available Reports */}
         <div className="mb-12">
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-2">
-            Available Now
+            Premium Reports Available
           </h2>
           <p className="text-center text-gray-600 mb-8">
             Get started with our comprehensive marketing analysis
@@ -201,6 +291,11 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                 <p className="text-gray-600">
                   {selectedReports.map(id => reportTypes.find(rt => rt.id === id)?.name).join(', ')}
                 </p>
+                {!user && (
+                  <p className="text-orange-600 text-sm mt-2">
+                    Your selection will be saved. Please log in to complete purchase.
+                  </p>
+                )}
               </div>
               
               <div className="flex items-center space-x-6">
@@ -211,12 +306,74 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                 </div>
                 
                 <button
-                  onClick={() => onSelectReports(selectedReports, false)}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 flex items-center"
+                  onClick={() => {
+                    if (!user) {
+                      // Store selection in localStorage before showing prompt
+                      const selectionData: StoredSelection = {
+                        reportIds: selectedReports,
+                        isBundle: false,
+                        timestamp: Date.now()
+                      };
+                      localStorage.setItem('selectedReports', JSON.stringify(selectionData));
+                      setShowLoginPrompt(true);
+                    } else {
+                      handleCheckout();
+                    }
+                  }}
+                  className={`${
+                    user 
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transform hover:-translate-y-0.5' 
+                      : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600'
+                  } text-white px-8 py-4 rounded-xl font-bold transition-all duration-200 flex items-center`}
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
-                  Proceed to Checkout
+                  {user ? 'Proceed to Checkout' : 'Login to Purchase'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Login Prompt Modal */}
+        {showLoginPrompt && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
+              <div className="text-center mb-6">
+                <div className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full mx-auto w-fit mb-4">
+                  <User className="w-8 h-8 text-white" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                  Login Required
+                </h3>
+                <p className="text-gray-600">
+                  Please log in to complete your purchase. Your selection will be saved and you'll be redirected back after login.
+                </p>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <p className="text-sm text-blue-800 font-medium">Selected Reports:</p>
+                  <p className="text-sm text-blue-600">
+                    {selectedReports.map(id => reportTypes.find(rt => rt.id === id)?.name).join(', ')}
+                  </p>
+                  <p className="text-sm text-blue-800 font-bold mt-2">Total: ${calculateTotal()}</p>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button
+                    type="button"
+                    onClick={handleLoginPromptCancel}
+                    className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleLoginPromptConfirm}
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
+                  >
+                    Login Now
+                  </button>
+                </div>
               </div>
             </div>
           </div>

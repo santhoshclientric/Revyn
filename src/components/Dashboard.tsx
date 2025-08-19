@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AuditForm } from './AuditForm';
 import { AuditResults } from './AuditResults';
 import { AuditSubmission } from '../types/audit';
 import { Brain, BarChart3, Users, Zap, ArrowRight, CheckCircle, Star } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<'welcome' | 'audit' | 'results'>('welcome');
   const [auditSubmission, setAuditSubmission] = useState<AuditSubmission | null>(null);
 
@@ -20,6 +22,10 @@ export const Dashboard: React.FC = () => {
   const handleStartNew = () => {
     setAuditSubmission(null);
     setCurrentView('welcome');
+  };
+
+  const handleGoToReports = () => {
+    navigate('/reports');
   };
 
   if (currentView === 'audit') {
@@ -66,8 +72,11 @@ export const Dashboard: React.FC = () => {
               Start Your Marketing Audit
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button className="border-2 border-gray-300 text-gray-700 px-10 py-4 rounded-xl text-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all duration-300">
-              Watch Demo
+            <button 
+              onClick={handleGoToReports}
+              className="border-2 border-blue-600 text-blue-600 px-10 py-4 rounded-xl text-lg font-semibold hover:bg-blue-50 transition-all duration-300"
+            >
+              View Premium Reports
             </button>
           </div>
           
@@ -256,8 +265,11 @@ export const Dashboard: React.FC = () => {
             >
               Start Your Free Audit Now
             </button>
-            <button className="border-2 border-white text-white px-10 py-4 rounded-xl text-lg font-semibold hover:bg-white hover:text-blue-600 transition-all duration-300">
-              Learn More
+            <button 
+              onClick={handleGoToReports}
+              className="border-2 border-white text-white px-10 py-4 rounded-xl text-lg font-semibold hover:bg-white hover:text-blue-600 transition-all duration-300"
+            >
+              View Premium Reports
             </button>
           </div>
         </div>
