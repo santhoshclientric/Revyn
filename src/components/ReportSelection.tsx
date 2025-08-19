@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { ReportType } from '../types/reports';
-import { ShoppingCart, Check, Star, Clock, DollarSign, Lock, Mail, Bell, User } from 'lucide-react';
+import { ShoppingCart, Check, Star, Clock, DollarSign, Lock, Mail, Bell, User, AlertCircle, CheckCircle } from 'lucide-react';
+import { supabase } from '../config/supabase';
 
 interface ReportSelectionProps {
   onSelectReports: (reportIds: string[], isBundle: boolean) => void;
@@ -22,6 +23,45 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
   const [showWaitlistModal, setShowWaitlistModal] = useState(false);
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [purchasedReportIds, setPurchasedReportIds] = useState<string[]>([]);
+  const [isLoadingPurchases, setIsLoadingPurchases] = useState(false);
+
+  // Load user's purchased reports to prevent duplicate purchases
+  useEffect(() => {
+    const loadUserPurchases = async () => {
+      if (!user) {
+        setPurchasedReportIds([]);
+        return;
+      }
+
+      setIsLoadingPurchases(true);
+      try {
+        const { data: purchases, error } = await supabase
+          .from('purchases')
+          .select('report_ids')
+          .eq('user_id', user.id)
+          .eq('status', 'completed');
+
+        if (error) {
+          console.error('Error loading user purchases:', error);
+          return;
+        }
+
+        // Flatten all report IDs from all purchases
+        const allPurchasedReportIds = purchases?.reduce((acc: string[], purchase) => {
+          return acc.concat(purchase.report_ids || []);
+        }, []) || [];
+
+        setPurchasedReportIds(allPurchasedReportIds);
+      } catch (error) {
+        console.error('Error loading purchases:', error);
+      } finally {
+        setIsLoadingPurchases(false);
+      }
+    };
+
+    loadUserPurchases();
+  }, [user]);
 
   // Load any existing selection from localStorage on mount
   useEffect(() => {
@@ -51,6 +91,12 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
       setShowWaitlistModal(true);
       return;
     }
+
+    // Check if user already purchased this report
+    if (purchasedReportIds.includes(reportId)) {
+      alert('You have already purchased this report. Check your dashboard to access it.');
+      return;
+    }
     
     setSelectedReports(prev => {
       const newSelection = prev.includes(reportId)
@@ -75,7 +121,15 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
   };
 
   const handleBundleSelect = () => {
-    const allReportIds = availableReports.map(rt => rt.id);
+    // Filter out already purchased reports
+    const availableForPurchase = availableReports.filter(rt => !purchasedReportIds.includes(rt.id));
+    
+    if (availableForPurchase.length === 0) {
+      alert('You have already purchased all available reports!');
+      return;
+    }
+
+    const allReportIds = availableForPurchase.map(rt => rt.id);
     setSelectedReports(allReportIds);
     setIsBundle(false); // Disable bundle for v1
     
@@ -96,6 +150,18 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
 
   const handleCheckout = () => {
     if (selectedReports.length === 0) return;
+    
+    // Final check for duplicate purchases before checkout
+    if (user) {
+      const duplicateReports = selectedReports.filter(id => purchasedReportIds.includes(id));
+      if (duplicateReports.length > 0) {
+        const duplicateNames = duplicateReports.map(id => 
+          reportTypes.find(rt => rt.id === id)?.name
+        ).join(', ');
+        alert(`You have already purchased: ${duplicateNames}. Please remove them from your selection.`);
+        return;
+      }
+    }
     
     // Always call onSelectReports - it will handle the login flow internally
     if (typeof onSelectReports === 'function') {
@@ -163,53 +229,80 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
             Get started with our comprehensive marketing analysis
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {availableReports.map((report) => (
-              <div
-                key={report.id}
-                className={`bg-white rounded-2xl shadow-xl p-8 border-2 transition-all duration-200 cursor-pointer ${
-                  selectedReports.includes(report.id)
-                    ? 'border-blue-500 shadow-2xl transform -translate-y-1'
-                    : 'border-gray-200 hover:border-blue-300 hover:shadow-2xl hover:-translate-y-0.5'
-                }`}
-                onClick={() => handleReportToggle(report.id)}
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="p-3 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl">
-                    <Star className="w-8 h-8 text-blue-600" />
-                  </div>
-                  {selectedReports.includes(report.id) && (
-                    <div className="p-2 bg-blue-500 rounded-full">
-                      <Check className="w-4 h-4 text-white" />
+            {availableReports.map((report) => {
+              const isAlreadyPurchased = purchasedReportIds.includes(report.id);
+              const isSelected = selectedReports.includes(report.id);
+              
+              return (
+                <div
+                  key={report.id}
+                  className={`bg-white rounded-2xl shadow-xl p-8 border-2 transition-all duration-200 relative ${
+                    isAlreadyPurchased
+                      ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-75'
+                      : isSelected
+                      ? 'border-blue-500 shadow-2xl transform -translate-y-1 cursor-pointer'
+                      : 'border-gray-200 hover:border-blue-300 hover:shadow-2xl hover:-translate-y-0.5 cursor-pointer'
+                  }`}
+                  onClick={() => !isAlreadyPurchased && handleReportToggle(report.id)}
+                >
+                  {isAlreadyPurchased && (
+                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                      Purchased
                     </div>
                   )}
-                </div>
-                
-                <h3 className="text-xl font-bold text-gray-900 mb-3">
-                  {report.name}
-                </h3>
-                
-                <p className="text-gray-600 mb-6 leading-relaxed">
-                  {report.description}
-                </p>
-                
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-center text-sm text-gray-500">
-                    <Clock className="w-4 h-4 mr-2" />
-                    {report.estimatedTime}
+                  
+                  <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-xl ${
+                      isAlreadyPurchased 
+                        ? 'bg-green-100' 
+                        : 'bg-gradient-to-r from-blue-100 to-purple-100'
+                    }`}>
+                      {isAlreadyPurchased ? (
+                        <CheckCircle className="w-8 h-8 text-green-600" />
+                      ) : (
+                        <Star className="w-8 h-8 text-blue-600" />
+                      )}
+                    </div>
+                    {isSelected && !isAlreadyPurchased && (
+                      <div className="p-2 bg-blue-500 rounded-full">
+                        <Check className="w-4 h-4 text-white" />
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center text-sm text-gray-500">
-                    <DollarSign className="w-4 h-4 mr-2" />
-                    ${report.price}
+                  
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">
+                    {report.name}
+                  </h3>
+                  
+                  <p className="text-gray-600 mb-6 leading-relaxed">
+                    {report.description}
+                  </p>
+                  
+                  <div className="space-y-3 mb-6">
+                    <div className="flex items-center text-sm text-gray-500">
+                      <Clock className="w-4 h-4 mr-2" />
+                      {report.estimatedTime}
+                    </div>
+                    <div className="flex items-center text-sm text-gray-500">
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      ${report.price}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center">
+                    {isAlreadyPurchased ? (
+                      <div className="text-green-600 font-bold">
+                        Already Purchased
+                      </div>
+                    ) : (
+                      <span className="text-2xl font-bold text-gray-900">
+                        ${report.price}
+                      </span>
+                    )}
                   </div>
                 </div>
-                
-                <div className="text-center">
-                  <span className="text-2xl font-bold text-gray-900">
-                    ${report.price}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -328,6 +421,29 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                 >
                   <ShoppingCart className="w-5 h-5 mr-2" />
                   {user ? 'Proceed to Checkout' : 'Login to Purchase'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Already Purchased Reports Info */}
+        {user && purchasedReportIds.length > 0 && !isLoadingPurchases && (
+          <div className="bg-green-50 border border-green-200 rounded-2xl p-6 mb-8">
+            <div className="flex items-start">
+              <CheckCircle className="w-6 h-6 text-green-600 mr-3 mt-1 flex-shrink-0" />
+              <div>
+                <h3 className="text-lg font-semibold text-green-800 mb-2">Reports You Own</h3>
+                <p className="text-green-700 mb-3">
+                  You have already purchased: {purchasedReportIds.map(id => 
+                    reportTypes.find(rt => rt.id === id)?.name
+                  ).filter(Boolean).join(', ')}
+                </p>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                >
+                  View in Dashboard
                 </button>
               </div>
             </div>

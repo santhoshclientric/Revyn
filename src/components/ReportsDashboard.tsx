@@ -155,7 +155,7 @@ export const ReportsDashboard: React.FC = () => {
     };
   }, [user, selectedReportIds]);
 
-  const handleReportSelection = useCallback((reportIds: string[], bundle: boolean) => {
+  const handleReportSelection = useCallback(async (reportIds: string[], bundle: boolean) => {
     console.log('handleReportSelection called with:', { reportIds, bundle, user: !!user });
     
     if (!user) {
@@ -169,6 +169,38 @@ export const ReportsDashboard: React.FC = () => {
       console.log('Stored selection and navigating to login');
       navigate('/login');
       return;
+    }
+
+    // Check for duplicate purchases before proceeding
+    try {
+      const { data: existingPurchases, error } = await supabase
+        .from('purchases')
+        .select('report_ids')
+        .eq('user_id', user.id)
+        .eq('status', 'completed');
+
+      if (error) {
+        console.error('Error checking existing purchases:', error);
+        // Continue anyway - frontend validation should have caught this
+      } else {
+        // Check if any of the selected reports are already purchased
+        const purchasedReportIds = existingPurchases?.reduce((acc: string[], purchase) => {
+          return acc.concat(purchase.report_ids || []);
+        }, []) || [];
+
+        const duplicateReports = reportIds.filter(id => purchasedReportIds.includes(id));
+        
+        if (duplicateReports.length > 0) {
+          const duplicateNames = duplicateReports.map(id => 
+            reportTypes.find(rt => rt.id === id)?.name
+          ).filter(Boolean).join(', ');
+          
+          alert(`You have already purchased: ${duplicateNames}. Please select different reports.`);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('Error validating purchases:', error);
     }
     
     // Clear any stored selection since user is logged in
@@ -451,7 +483,13 @@ export const ReportsDashboard: React.FC = () => {
                         <p className="text-lg font-bold text-gray-900">${purchase.amount}</p>
                         <div className="mt-2">
                           <button 
-                            onClick={() => navigate(`/form/${purchase.report_ids[0]}?purchase_id=${purchase.id}`)}
+                            onClick={() => navigate(`/form/${purchase.report_ids[0]}`, {
+                              state: {
+                                purchaseId: purchase.id,
+                                source: 'dashboard',
+                                reportIds: purchase.report_ids
+                              }
+                            })}
                             className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
                           >
                             Start Report
