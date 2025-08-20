@@ -1,5 +1,6 @@
 import { loadStripe, Stripe } from '@stripe/stripe-js';
-import { stripePromise } from '../config/stripe';
+// Remove the import of stripePromise - we'll load it lazily
+// import { stripePromise } from '../config/stripe';
 
 export interface PaymentIntentData {
   amount: number;
@@ -12,6 +13,7 @@ export interface PaymentIntentData {
 export class StripeService {
   private static instance: StripeService;
   private stripe: Stripe | null = null;
+  private stripePromise: Promise<Stripe | null> | null = null;
   private apiUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   
   static getInstance(): StripeService {
@@ -21,11 +23,28 @@ export class StripeService {
     return StripeService.instance;
   }
 
-  async initialize(): Promise<Stripe | null> {
-    if (!this.stripe) {
-      this.stripe = await stripePromise;
+  // Lazy load Stripe only when needed
+  private async getStripe(): Promise<Stripe | null> {
+    if (!this.stripePromise) {
+      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+      if (!publishableKey) {
+        console.error('Stripe publishable key not found');
+        return null;
+      }
+      
+      console.log('Loading Stripe on demand...');
+      this.stripePromise = loadStripe(publishableKey);
     }
+    
+    if (!this.stripe) {
+      this.stripe = await this.stripePromise;
+    }
+    
     return this.stripe;
+  }
+
+  async initialize(): Promise<Stripe | null> {
+    return await this.getStripe();
   }
 
   async createPaymentIntent(data: PaymentIntentData): Promise<{ clientSecret: string; paymentIntentId: string }> {

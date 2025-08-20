@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { stripePromise } from '../config/stripe';
+// Remove the direct import of stripePromise
+// import { stripePromise } from '../config/stripe';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { StripeService, PaymentIntentData } from '../services/stripeService';
 import { Lock, ArrowLeft, CheckCircle, Loader, AlertCircle } from 'lucide-react';
@@ -218,6 +219,7 @@ export const PaymentFlow: React.FC = () => {
   const selectedReports = reportTypes.filter(rt => reportIds.includes(rt.id));
   const total = reportIds.length * individualPrice;
   const [clientSecret, setClientSecret] = useState('');
+  const [stripePromise, setStripePromise] = useState<Promise<any> | null>(null);
 
   // Handler functions for the PaymentForm component
   const handlePaymentSuccess = (paymentIntentId: string) => {
@@ -233,6 +235,23 @@ export const PaymentFlow: React.FC = () => {
   const handleGoBack = () => {
     navigate('/reports');
   };
+
+  // Only load Stripe when PaymentFlow component mounts (user is actually going to pay)
+  useEffect(() => {
+    const loadStripeForPayment = async () => {
+      const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+      if (!publishableKey) {
+        console.error('Stripe publishable key not found');
+        return;
+      }
+      
+      console.log('Loading Stripe for payment flow...');
+      const { loadStripe } = await import('@stripe/stripe-js');
+      setStripePromise(loadStripe(publishableKey));
+    };
+
+    loadStripeForPayment();
+  }, []);
 
   // Create payment intent early to get clientSecret for Elements
   useEffect(() => {
@@ -271,6 +290,18 @@ export const PaymentFlow: React.FC = () => {
       }
     }
   };
+
+  // Don't render Elements until Stripe is loaded
+  if (!stripePromise) {
+    return (
+      <div className="max-w-6xl mx-auto px-4">
+        <div className="text-center py-12">
+          <Loader className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading payment system...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-6xl mx-auto px-4">
@@ -314,7 +345,7 @@ export const PaymentFlow: React.FC = () => {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Payment Information</h2>
           
-          {clientSecret ? (
+          {clientSecret && stripePromise ? (
             <Elements stripe={stripePromise} options={stripeElementsOptions}>
               <PaymentForm
                 reportIds={reportIds}

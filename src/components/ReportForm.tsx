@@ -428,12 +428,15 @@ export const ReportForm: React.FC = () => {
   };
 
   const handleBack = () => {
+    // Always go back to dashboard if user came from dashboard
     if (source === 'dashboard' || purchaseIdFromUrl) {
       navigate('/dashboard');
     } else if (paymentId || paymentIntentFromUrl) {
+      // Only go to payment if user came directly from payment flow
       navigate('/payment');
     } else {
-      navigate('/reports');
+      // Default fallback
+      navigate('/dashboard');
     }
   };
 
@@ -570,7 +573,7 @@ export const ReportForm: React.FC = () => {
               className="w-full border-2 border-gray-300 text-gray-700 py-3 px-6 rounded-xl font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back
+              Back to Dashboard
             </button>
           </form>
         </div>
@@ -788,7 +791,7 @@ export const ReportForm: React.FC = () => {
                 className="px-4 lg:px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center text-sm lg:text-base"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to {source === 'dashboard' || purchaseIdFromUrl ? 'Dashboard' : 'Reports'}
+                Back to Dashboard
               </button>
             </div>
 

@@ -1,12 +1,22 @@
-import { loadStripe } from '@stripe/stripe-js';
+// src/config/stripe.ts - Clean version without conflicts
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 
-// Make sure to replace with your actual publishable key
-const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_test_51234567890abcdef';
+// Lazy loading approach - only load when needed
+let stripeInstance: Promise<Stripe | null> | null = null;
 
-export const stripePromise = loadStripe(stripePublishableKey);
-
-export const STRIPE_CONFIG = {
-  publishableKey: stripePublishableKey,
-  currency: 'usd',
-  country: 'US'
+export const getStripe = (): Promise<Stripe | null> => {
+  if (!stripeInstance) {
+    const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
+    if (!publishableKey) {
+      console.error('Stripe publishable key not found');
+      return Promise.resolve(null);
+    }
+    
+    console.log('Loading Stripe for the first time...');
+    stripeInstance = loadStripe(publishableKey);
+  }
+  return stripeInstance;
 };
+
+// For backward compatibility - but it's now lazy loaded
+export const stripePromise = getStripe();
