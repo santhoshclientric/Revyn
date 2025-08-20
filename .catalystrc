@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "project": 1,
+    "env": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "29466000000039052",
+      "name": "Revyn",
+      "domain": {
+        "id": "10102096112",
+        "name": "revyn-875229608.development"
+      },
+      "timezone": "America/Vancouver",
+      "env": [
+        {
+          "idx": 1,
+          "id": "875229608",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}

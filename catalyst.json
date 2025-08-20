@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "targets": [
+      "openaiInteg",
+      "api"
+    ],
+    "ignore": [],
+    "source": "functions"
+  }
+}
