@@ -14,13 +14,110 @@ const PORT = process.env.PORT || 3001;
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://your-domain.com'] 
-    : ['http://localhost:5174', 'http://localhost:5174']
+    : ['http://localhost:5173', 'http://localhost:5173']
 }));
 app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+app.post('/api/trigger-ai-analysis', async (req, res) => {
+  try {
+    console.log('Triggering AI analysis...');
+    const { purchase_id } = req.body;
+
+    // Validate required fields
+    if (!purchase_id) {
+      return res.status(400).json({
+        error: 'Missing required field: purchase_id'
+      });
+    }
+
+    // Validate UUID format (basic check)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(purchase_id)) {
+      return res.status(400).json({
+        error: 'Invalid purchase_id format. Must be a valid UUID.'
+      });
+    }
+
+    // Get Catalyst API URL from environment variables
+    const catalystApiUrl = process.env.CATALYST_AI_API_URL;
+    if (!catalystApiUrl) {
+      console.error('CATALYST_AI_API_URL not configured in environment variables');
+      return res.status(500).json({
+        error: 'AI analysis service not configured'
+      });
+    }
+
+    console.log(`Calling Catalyst API for purchase_id: ${purchase_id}`);
+    const requestBody = [{"purchase_id": purchase_id}];
+    console.log(requestBody)
+
+    // Make the API call to Catalyst
+    const catalystResponse = await fetch(catalystApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Add any additional headers if needed
+        // 'Authorization': `Bearer ${process.env.CATALYST_API_KEY}`, // if auth is required
+      },
+      body: requestBody
+    });
+
+    console.log(`Catalyst API response status: ${catalystResponse.status}`);
+
+    if (!catalystResponse.ok) {
+      const errorText = await catalystResponse.text();
+      console.error('Catalyst API error response:', errorText);
+      
+      return res.status(502).json({
+        error: 'AI analysis service temporarily unavailable',
+        details: process.env.NODE_ENV === 'development' ? errorText : undefined
+      });
+    }
+
+    let catalystResult;
+    try {
+      catalystResult = await catalystResponse.json();
+      console.log('Catalyst API success response:', catalystResult);
+    } catch (parseError) {
+      console.log('Catalyst API returned non-JSON response (this might be expected)');
+      catalystResult = { message: 'AI analysis triggered successfully' };
+    }
+
+    // Return success response to client
+    res.json({
+      success: true,
+      message: 'AI analysis triggered successfully',
+      purchase_id: purchase_id,
+      timestamp: new Date().toISOString(),
+      catalyst_response: catalystResult
+    });
+
+  } catch (error) {
+    console.error('Error triggering AI analysis:', error);
+    
+    // Handle different types of errors
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      return res.status(502).json({
+        error: 'Unable to connect to AI analysis service'
+      });
+    }
+    
+    if (error.code === 'ECONNREFUSED') {
+      return res.status(502).json({
+        error: 'AI analysis service is unavailable'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Failed to trigger AI analysis',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // Create payment intent endpoint

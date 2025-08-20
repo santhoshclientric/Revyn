@@ -1,8 +1,9 @@
 {
   "functions": {
     "targets": [
-      "openaiInteg",
-      "api"
+  
+      "api",
+      "openai"
     ],
     "ignore": [],
     "source": "functions"

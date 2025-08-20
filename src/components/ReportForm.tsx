@@ -1,8 +1,10 @@
+// Updated ReportForm.tsx with API call integration
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../config/supabase';
-import { CheckCircle, ArrowRight, ArrowLeft, Loader, Save } from 'lucide-react';
+import { CheckCircle, ArrowRight, ArrowLeft, Loader, Save, Zap } from 'lucide-react';
 
 interface Question {
   id: number;
@@ -19,6 +21,107 @@ interface Answer {
   answer_text?: string;
   answer_options?: string[];
 }
+
+// API Service for triggering AI analysis
+// Updated ReportForm.tsx - Replace the AIAnalysisService class with this:
+
+// AI Service that calls your server endpoint
+class AIAnalysisService {
+  private static readonly SERVER_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+  static async triggerAIAnalysis(purchaseId: string): Promise<boolean> {
+    try {
+      console.log('Triggering AI analysis via server for purchase:', purchaseId);
+      
+      const response = await fetch(`${this.SERVER_API_URL}/api/trigger-ai-analysis`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          purchase_id: purchaseId
+        })
+      });
+
+      console.log('Server response status:', response.status);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Server error:', errorData);
+        throw new Error(errorData.error || `Server error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('AI analysis triggered successfully via server:', result);
+      return true;
+    } catch (error) {
+      console.error('Error triggering AI analysis:', error);
+      throw error;
+    }
+  }
+}
+
+// Usage in your handleSubmit function remains the same:
+const handleSubmit = async () => {
+  if (!user || !currentPurchaseId) {
+    setError('Missing user or purchase information. Please try again.');
+    return;
+  }
+
+  try {
+    setIsSubmitting(true);
+    setError('');
+
+    // Save the final answer
+    if (tempAnswer) {
+      await saveAnswerToDatabase(currentQuestion.id, tempAnswer);
+      setAnswers(prev => ({ ...prev, [currentQuestion.id]: tempAnswer }));
+    }
+
+    // Update purchase status to form_completed
+    const { error: updateError } = await supabase
+      .from('purchases')
+      .update({ report_status: 'form_completed' })
+      .eq('user_id', user.id)
+      .eq('id', currentPurchaseId);
+
+    if (updateError) {
+      console.error('Error updating purchase status:', updateError);
+      throw new Error('Failed to update completion status');
+    }
+
+    console.log('Form completed successfully, triggering AI analysis...');
+
+    // Trigger AI analysis API call via your server
+    try {
+      await AIAnalysisService.triggerAIAnalysis(currentPurchaseId);
+      console.log('AI analysis triggered successfully via server');
+    } catch (apiError) {
+      console.error('AI analysis API call failed:', apiError);
+      // Don't stop the flow, just log the error
+      // The user can still see their form is completed
+    }
+
+    // Navigate to a success/processing page
+    navigate('/processing', {
+      state: {
+        reportId,
+        reportIds,
+        paymentId: paymentId || paymentIntentFromUrl,
+        purchaseId: currentPurchaseId,
+        companyInfo,
+        source,
+        completedQuestions: questions.length,
+        aiAnalysisTriggered: true
+      }
+    });
+
+  } catch (error) {
+    console.error('Error submitting form:', error);
+    setError('Failed to submit form. Please try again.');
+    setIsSubmitting(false);
+  }
+};
 
 export const ReportForm: React.FC = () => {
   console.log('=== REPORT FORM COMPONENT MOUNTED ===');
@@ -55,11 +158,12 @@ export const ReportForm: React.FC = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
-  const [tempAnswer, setTempAnswer] = useState<Answer | null>(null); // Temporary answer before save
+  const [tempAnswer, setTempAnswer] = useState<Answer | null>(null);
   const [companyInfo, setCompanyInfo] = useState({ companyName: '', email: '' });
   const [showCompanyForm, setShowCompanyForm] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
 
@@ -84,7 +188,6 @@ export const ReportForm: React.FC = () => {
               });
               console.log('Loaded company info from purchases:', purchase);
             } else {
-              // Fallback to default
               setCompanyInfo({
                 companyName: 'Demo Company',
                 email: user.email || ''
@@ -101,7 +204,6 @@ export const ReportForm: React.FC = () => {
           console.log('Continuing existing form, skipping company info');
           setShowCompanyForm(false);
         } else {
-          // New purchase - set default values
           setCompanyInfo(prev => ({
             companyName: prev.companyName || '',
             email: user.email || prev.email
@@ -173,10 +275,8 @@ export const ReportForm: React.FC = () => {
 
             // Find the last answered question to resume from there
             if (questionsData) {
-              // Get all question IDs in order
               const orderedQuestionIds = questionsData.map(q => q.id).sort((a, b) => a - b);
               
-              // Find the first unanswered question
               let resumeIndex = 0;
               for (let i = 0; i < orderedQuestionIds.length; i++) {
                 const questionId = orderedQuestionIds[i];
@@ -184,7 +284,6 @@ export const ReportForm: React.FC = () => {
                   resumeIndex = i;
                   break;
                 }
-                // If we've answered all questions, stay on the last one
                 if (i === orderedQuestionIds.length - 1) {
                   resumeIndex = i;
                 }
@@ -194,11 +293,9 @@ export const ReportForm: React.FC = () => {
               setCurrentQuestionIndex(resumeIndex);
             }
 
-            // Since user has existing answers, skip company form and go directly to questions
             console.log('User has existing answers, skipping company form');
             setShowCompanyForm(false);
 
-            // Update status to form_started if user has some answers but hasn't completed
             if (existingAnswers.length < (questionsData?.length || 80)) {
               const { error: statusError } = await supabase
                 .from('purchases')
@@ -213,7 +310,6 @@ export const ReportForm: React.FC = () => {
               }
             }
           } else if (source === 'dashboard' && currentPurchaseId) {
-            // User is continuing but has no answers yet, still skip company form since they're returning
             console.log('User continuing from dashboard with no answers, skipping company form');
             setShowCompanyForm(false);
           }
@@ -319,7 +415,6 @@ export const ReportForm: React.FC = () => {
       )
     };
 
-    // Store temporarily - don't save to database until Next button
     setTempAnswer(answerData);
   };
 
@@ -329,20 +424,17 @@ export const ReportForm: React.FC = () => {
       return;
     }
 
-    // Save the current answer to database
     const answerToSave = tempAnswer || answers[currentQuestion.id];
     
     if (answerToSave && user && currentPurchaseId) {
       try {
         await saveAnswerToDatabase(currentQuestion.id, answerToSave);
         
-        // Update local state
         setAnswers(prev => ({ ...prev, [currentQuestion.id]: answerToSave }));
         setTempAnswer(null);
         setError('');
 
-        // Update status to form_started if this is the first question being answered
-        const totalAnswered = Object.keys(answers).length + 1; // +1 for the current answer
+        const totalAnswered = Object.keys(answers).length + 1;
         if (totalAnswered === 1) {
           const { error: statusError } = await supabase
             .from('purchases')
@@ -370,7 +462,6 @@ export const ReportForm: React.FC = () => {
   };
 
   const handlePrevious = async () => {
-    // Save current answer if there is one
     if (tempAnswer && user && currentPurchaseId) {
       try {
         await saveAnswerToDatabase(currentQuestion.id, tempAnswer);
@@ -389,27 +480,46 @@ export const ReportForm: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    if (!user || !currentPurchaseId) {
+      setError('Missing user or purchase information. Please try again.');
+      return;
+    }
+
     try {
+      setIsSubmitting(true);
+      setError('');
+
       // Save the final answer
-      if (tempAnswer && user && currentPurchaseId) {
+      if (tempAnswer) {
         await saveAnswerToDatabase(currentQuestion.id, tempAnswer);
         setAnswers(prev => ({ ...prev, [currentQuestion.id]: tempAnswer }));
       }
 
-      // Update purchase status to form_completed (questionnaire finished)
-      if (user && currentPurchaseId) {
-        const { error: updateError } = await supabase
-          .from('purchases')
-          .update({ report_status: 'form_completed' })
-          .eq('user_id', user.id)
-          .eq('id', currentPurchaseId);
+      // Update purchase status to form_completed
+      const { error: updateError } = await supabase
+        .from('purchases')
+        .update({ report_status: 'form_completed' })
+        .eq('user_id', user.id)
+        .eq('id', currentPurchaseId);
 
-        if (updateError) {
-          console.error('Error updating purchase status:', updateError);
-        }
+      if (updateError) {
+        console.error('Error updating purchase status:', updateError);
+        throw new Error('Failed to update completion status');
       }
 
-      // Navigate to completion
+      console.log('Form completed successfully, triggering AI analysis...');
+
+      // Trigger AI analysis API call
+      try {
+        await AIAnalysisService.triggerAIAnalysis(currentPurchaseId);
+        console.log('AI analysis triggered successfully');
+      } catch (apiError) {
+        console.error('AI analysis API call failed:', apiError);
+        // Don't stop the flow, just log the error
+        // The user can still see their form is completed
+      }
+
+      // Navigate to a success/processing page
       navigate('/processing', {
         state: {
           reportId,
@@ -418,24 +528,24 @@ export const ReportForm: React.FC = () => {
           purchaseId: currentPurchaseId,
           companyInfo,
           source,
-          completedQuestions: questions.length
+          completedQuestions: questions.length,
+          aiAnalysisTriggered: true
         }
       });
+
     } catch (error) {
       console.error('Error submitting form:', error);
       setError('Failed to submit form. Please try again.');
+      setIsSubmitting(false);
     }
   };
 
   const handleBack = () => {
-    // Always go back to dashboard if user came from dashboard
     if (source === 'dashboard' || purchaseIdFromUrl) {
       navigate('/dashboard');
     } else if (paymentId || paymentIntentFromUrl) {
-      // Only go to payment if user came directly from payment flow
       navigate('/payment');
     } else {
-      // Default fallback
       navigate('/dashboard');
     }
   };
@@ -443,7 +553,6 @@ export const ReportForm: React.FC = () => {
   const getCurrentAnswer = () => {
     if (!currentQuestion) return null;
     
-    // Return temp answer if exists, otherwise saved answer
     if (tempAnswer && tempAnswer.question_id === currentQuestion.id) {
       return tempAnswer.answer_text || tempAnswer.answer_options || null;
     }
@@ -599,10 +708,10 @@ export const ReportForm: React.FC = () => {
               <span className="text-sm font-semibold text-gray-700">
                 {Math.round(progress)}% Complete
               </span>
-              {isSaving && (
+              {(isSaving || isSubmitting) && (
                 <div className="flex items-center text-xs text-blue-600 mt-1">
                   <Save className="w-3 h-3 mr-1 animate-spin" />
-                  Saving...
+                  {isSubmitting ? 'Submitting...' : 'Saving...'}
                 </div>
               )}
             </div>
@@ -643,7 +752,8 @@ export const ReportForm: React.FC = () => {
                     <button
                       key={index}
                       onClick={() => handleAnswerChange(option)}
-                      className={`w-full text-left p-4 lg:p-5 rounded-xl border-2 transition-all duration-200 ${
+                      disabled={isSaving || isSubmitting}
+                      className={`w-full text-left p-4 lg:p-5 rounded-xl border-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                         isSelected
                           ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-900 shadow-md'
                           : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 hover:shadow-sm'
@@ -685,7 +795,8 @@ export const ReportForm: React.FC = () => {
                           handleAnswerChange([...currentSelections, option]);
                         }
                       }}
-                      className={`w-full text-left p-4 lg:p-5 rounded-xl border-2 transition-all duration-200 ${
+                      disabled={isSaving || isSubmitting}
+                      className={`w-full text-left p-4 lg:p-5 rounded-xl border-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                         isSelected
                           ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-purple-50 text-blue-900 shadow-md'
                           : 'border-gray-200 hover:border-blue-300 hover:bg-gray-50 hover:shadow-sm'
@@ -719,15 +830,17 @@ export const ReportForm: React.FC = () => {
                     type="text"
                     value={(getCurrentAnswer() as string) || ''}
                     onChange={(e) => handleAnswerChange(e.target.value)}
+                    disabled={isSaving || isSubmitting}
                     placeholder="Enter your answer..."
-                    className="w-full p-4 lg:p-5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-all duration-200 text-sm lg:text-base"
+                    className="w-full p-4 lg:p-5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-all duration-200 text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 ) : (
                   <textarea
                     value={(getCurrentAnswer() as string) || ''}
                     onChange={(e) => handleAnswerChange(e.target.value)}
+                    disabled={isSaving || isSubmitting}
                     placeholder="Please provide your detailed answer..."
-                    className="w-full p-4 lg:p-5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none transition-all duration-200 text-sm lg:text-base"
+                    className="w-full p-4 lg:p-5 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none transition-all duration-200 text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                     rows={5}
                   />
                 )}
@@ -743,7 +856,8 @@ export const ReportForm: React.FC = () => {
                   max="10"
                   value={(getCurrentAnswer() as string) || '5'}
                   onChange={(e) => handleAnswerChange(e.target.value)}
-                  className="w-full h-4 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  disabled={isSaving || isSubmitting}
+                  className="w-full h-4 bg-gray-200 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <div className="flex justify-between text-sm text-gray-500">
                   <span>1</span>
@@ -765,8 +879,9 @@ export const ReportForm: React.FC = () => {
                 <textarea
                   value={(getCurrentAnswer() as string) || ''}
                   onChange={(e) => handleAnswerChange(e.target.value)}
+                  disabled={isSaving || isSubmitting}
                   placeholder="Please provide your answer..."
-                  className="w-full p-3 mt-2 border border-gray-300 rounded-lg"
+                  className="w-full p-3 mt-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                   rows={3}
                 />
               </div>
@@ -778,7 +893,7 @@ export const ReportForm: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 order-2 lg:order-1">
               <button
                 onClick={handlePrevious}
-                disabled={currentQuestionIndex === 0 || isSaving}
+                disabled={currentQuestionIndex === 0 || isSaving || isSubmitting}
                 className="px-4 lg:px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center text-sm lg:text-base"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -787,7 +902,7 @@ export const ReportForm: React.FC = () => {
               
               <button
                 onClick={handleBack}
-                disabled={isSaving}
+                disabled={isSaving || isSubmitting}
                 className="px-4 lg:px-6 py-3 border-2 border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center text-sm lg:text-base"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -799,7 +914,7 @@ export const ReportForm: React.FC = () => {
               {!isLastQuestion ? (
                 <button
                   onClick={handleNext}
-                  disabled={!isCurrentQuestionAnswered() || isSaving}
+                  disabled={!isCurrentQuestionAnswered() || isSaving || isSubmitting}
                   className="w-full lg:w-auto px-6 lg:px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center transition-all duration-200 text-sm lg:text-base"
                 >
                   {isSaving ? (
@@ -817,18 +932,18 @@ export const ReportForm: React.FC = () => {
               ) : (
                 <button
                   onClick={handleSubmit}
-                  disabled={!isCurrentQuestionAnswered() || isSaving}
+                  disabled={!isCurrentQuestionAnswered() || isSaving || isSubmitting}
                   className="w-full lg:w-auto px-6 lg:px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center transition-all duration-200 text-sm lg:text-base"
                 >
-                  {isSaving ? (
+                  {isSubmitting ? (
                     <>
-                      <Save className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                      Submitting & Starting AI Analysis...
                     </>
                   ) : (
                     <>
-                      Complete Audit
-                      <CheckCircle className="w-4 h-4 ml-2" />
+                      <Zap className="w-4 h-4 mr-2" />
+                      Complete Audit & Start AI Analysis
                     </>
                   )}
                 </button>
