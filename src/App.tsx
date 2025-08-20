@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { UserDashboard } from './components/Dashboard/UserDashboard';
 import { PaymentFlow } from './components/PaymentFlow';
 import { ReportForm } from './components/ReportForm';
 import { ProcessingPage } from './components/ProcessingPage';
@@ -34,75 +33,120 @@ const ScrollToTop: React.FC = () => {
   return null;
 };
 
-// Hook to prevent unnecessary tab reload behavior
+// Enhanced hook to prevent unnecessary tab reload behavior
 const usePreventTabReload = () => {
   useEffect(() => {
+    let isTabHidden = false;
+    
     const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        // Tab became visible again - prevent unnecessary operations
+      const wasHidden = isTabHidden;
+      isTabHidden = document.hidden;
+      
+      if (wasHidden && !document.hidden) {
+        // Tab became visible again
         console.log('Tab visible - preventing unnecessary reloads');
+        
+        // Set a flag to help components know tab was just restored
+        sessionStorage.setItem('tabJustRestored', 'true');
+        
+        // Clear the flag after a short delay
+        setTimeout(() => {
+          sessionStorage.removeItem('tabJustRestored');
+        }, 1000);
+      } else if (!wasHidden && document.hidden) {
+        // Tab became hidden
+        console.log('Tab hidden - preserving application state');
       }
     };
 
     const handlePageShow = (e: PageTransitionEvent) => {
       if (e.persisted) {
         // Page was loaded from cache (back/forward navigation)
-        console.log('Page loaded from cache');
-        // Don't prevent default here as it can cause issues
+        console.log('Page loaded from cache - preventing unnecessary data reloads');
+        sessionStorage.setItem('pageFromCache', 'true');
+        
+        // Clear the flag after components have a chance to read it
+        setTimeout(() => {
+          sessionStorage.removeItem('pageFromCache');
+        }, 500);
       }
     };
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      // Only show warning if there's unsaved data
+      // Only show warning if there's actual unsaved data
       const hasUnsavedChanges = sessionStorage.getItem('hasUnsavedChanges');
-      if (hasUnsavedChanges) {
+      if (hasUnsavedChanges === 'true') {
         e.preventDefault();
-        e.returnValue = '';
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
       }
     };
 
+    // Prevent aggressive refresh on focus
+    const handleFocus = () => {
+      console.log('Window focused - maintaining current state');
+      // Don't trigger any automatic data refreshes here
+    };
+
+    const handleBlur = () => {
+      console.log('Window blurred - preserving state');
+      // Mark that the window was blurred to prevent refresh on focus
+      sessionStorage.setItem('windowWasBlurred', 'true');
+    };
+
+    // Add event listeners
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pageshow', handlePageShow);
     window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('blur', handleBlur);
 
     return () => {
+      // Cleanup
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('blur', handleBlur);
     };
   }, []);
 };
 
-function App() {
-  // Use the hook to prevent tab reload behavior
+// Add a component wrapper to prevent unnecessary re-renders
+const AppContent: React.FC = () => {
   usePreventTabReload();
 
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <Header />
+      <main>
+        <Routes>
+          <Route path="/dashboard" element={<ReportsDashboard />} />
+          <Route path="/reports" element={<ReportsPage />} />
+          <Route path="/" element={<Dashboard />} />
+          
+          <Route path="/payment" element={<PaymentFlow />} />
+          <Route path="/form/:reportId" element={<ReportForm />} />
+          <Route path="/processing" element={<ProcessingPage />} />
+          <Route path="/report-view" element={<ProtectedRoute><ReportViewPage /></ProtectedRoute>} />
+          
+          <Route path="/about" element={<About />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+        </Routes>
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+function App() {
   return (
     <AuthProvider>
       <Router>
         <ScrollToTop />
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-          <Header />
-          <main>
-            <Routes>
-              <Route path="/dashboard" element={<ReportsDashboard />} />
-              <Route path="/reports" element={<ReportsPage />} />
-              <Route path="/" element={<Dashboard />} />
-              
-              <Route path="/payment" element={<PaymentFlow />} />
-              <Route path="/form/:reportId" element={<ReportForm />} />
-              <Route path="/processing" element={<ProcessingPage />} />
-              <Route path="/report-view" element={<ProtectedRoute><ReportViewPage /></ProtectedRoute>} />
-              
-              <Route path="/about" element={<About />} />
-              <Route path="/contact" element={<Contact />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<SignUp />} />
-              <Route path="/payment-success" element={<PaymentSuccess />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
+        <AppContent />
       </Router>
     </AuthProvider>
   );

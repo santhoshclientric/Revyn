@@ -1,12 +1,12 @@
-// Updated ReportViewPage.tsx that integrates with your AI results table
+// Updated ReportViewPage.tsx - Fixed to prevent tab reload behavior
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../config/supabase';
 import { reportTypes } from '../data/reportTypes';
 import { ArrowLeft, Download, MessageCircle, Loader, Brain, AlertTriangle, Eye } from 'lucide-react';
-import { AIReportViewer } from '../components/AIReportViewer'; // Your new component
+import { AIReportViewer } from '../components/AIReportViewer';
 
 interface Purchase {
   id: string;
@@ -24,7 +24,7 @@ interface Purchase {
 interface AIResult {
   id: string;
   purchase_id: string;
-  result_data: any; // This will be your JSON report data
+  result_data: any;
   status: string;
   created_at: string;
   updated_at: string;
@@ -40,20 +40,66 @@ export const ReportViewPage: React.FC = () => {
   const [aiResult, setAiResult] = useState<AIResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  
+  // Use refs to track if data has been loaded to prevent reloads
+  const hasLoadedData = useRef(false);
+  const currentPurchaseId = useRef<string | null>(null);
 
+  // Load data only once when component mounts or purchaseId changes
   useEffect(() => {
+    // Only load if we haven't loaded this purchase before
     if (!purchaseId || !user) {
       navigate('/dashboard');
       return;
     }
+
+    // Check if we're loading the same purchase we already have
+    if (currentPurchaseId.current === purchaseId && hasLoadedData.current && purchase && aiResult) {
+      console.log('Data already loaded for this purchase, skipping reload');
+      return;
+    }
+
+    // Check if tab is hidden - don't load data when tab is not visible
+    if (document.hidden) {
+      console.log('Tab is hidden, deferring data load');
+      return;
+    }
+
     loadReportData();
-  }, [purchaseId, user]);
+  }, [purchaseId, user]); // Removed navigate from dependencies to prevent reloads
+
+  // Handle visibility change without reloading data
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('ReportView tab hidden - preserving state');
+      } else {
+        console.log('ReportView tab visible - maintaining current data');
+        // Don't reload data here - just log the visibility change
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const loadReportData = async () => {
     if (!user || !purchaseId) return;
+    
+    // Prevent multiple simultaneous loads
+    if (isLoading && currentPurchaseId.current === purchaseId) {
+      console.log('Already loading this purchase, skipping');
+      return;
+    }
 
     try {
       setIsLoading(true);
+      currentPurchaseId.current = purchaseId;
+
+      console.log('Loading report data for purchase:', purchaseId);
 
       // Fetch purchase details
       const { data: purchaseData, error: purchaseError } = await supabase
@@ -69,9 +115,10 @@ export const ReportViewPage: React.FC = () => {
         return;
       }
 
+      console.log('Purchase loaded:', purchaseData);
       setPurchase(purchaseData);
 
-      // Fetch AI results data from your new table
+      // Fetch AI results data
       const { data: aiResultsData, error: aiResultsError } = await supabase
         .from('ai_results')
         .select('*')
@@ -85,7 +132,10 @@ export const ReportViewPage: React.FC = () => {
       }
 
       if (aiResultsData) {
+        console.log('AI results loaded:', aiResultsData);
         setAiResult(aiResultsData);
+        hasLoadedData.current = true;
+        setError(''); // Clear any previous errors
       } else {
         setError('Report data not found');
       }
@@ -99,13 +149,16 @@ export const ReportViewPage: React.FC = () => {
   };
 
   const handleBack = () => {
+    // Clear the loaded data tracking when navigating away
+    hasLoadedData.current = false;
+    currentPurchaseId.current = null;
     navigate('/dashboard');
   };
 
   const handleDownload = () => {
-    // Implement PDF download functionality
     console.log('Download report for purchase:', purchaseId);
-    // You can implement PDF generation here using libraries like jsPDF or html2pdf
+    // Implement PDF download functionality here
+    alert('PDF download functionality coming soon!');
   };
 
   const handleStartChat = () => {
@@ -119,6 +172,7 @@ export const ReportViewPage: React.FC = () => {
     });
   };
 
+  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4">
@@ -134,6 +188,7 @@ export const ReportViewPage: React.FC = () => {
     );
   }
 
+  // Show error state
   if (error || !purchase) {
     return (
       <div className="min-h-screen flex items-center justify-center py-12 px-4">
@@ -149,8 +204,12 @@ export const ReportViewPage: React.FC = () => {
               Back to Dashboard
             </button>
             <button
-              onClick={loadReportData}
-              className="block bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+              onClick={() => {
+                hasLoadedData.current = false;
+                setError('');
+                loadReportData();
+              }}
+              className="block bg-gray-200 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors mx-auto"
             >
               Retry Loading
             </button>
@@ -160,7 +219,7 @@ export const ReportViewPage: React.FC = () => {
     );
   }
 
-  // Use the AIReportViewer component to display the report
+  // Render the report using AIReportViewer
   return (
     <AIReportViewer
       reportData={aiResult?.result_data}
