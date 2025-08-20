@@ -207,7 +207,7 @@ export const Dashboard: React.FC = () => {
               onClick={handleStartAudit}
               className="bg-white text-blue-600 px-10 py-4 rounded-xl text-lg font-bold hover:bg-gray-100 transition-all duration-300 shadow-2xl hover:shadow-3xl transform hover:-translate-y-1"
             >
-              Start Your Free Audit Now
+              Start Your Business Audit Now
             </button>
             <button 
               onClick={handleGoToReports}

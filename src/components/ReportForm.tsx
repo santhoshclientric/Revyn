@@ -673,7 +673,7 @@ export const ReportForm: React.FC = () => {
               type="submit"
               className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
             >
-              Start Audit ({questions.length} Questions)
+              Start Audit
             </button>
             
             <button
