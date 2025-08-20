@@ -115,7 +115,13 @@ export const ReportsDashboard: React.FC = () => {
   // Load dashboard stats when user changes or component mounts
   useEffect(() => {
     const loadDashboardStats = async () => {
-      if (!user || !isDashboardPage) return;
+      // Immediately redirect if no user (logout scenario)
+      if (!user) {
+        navigate('/');
+        return;
+      }
+      
+      if (!isDashboardPage) return;
       
       // Don't reload if we recently loaded data (within 30 seconds) and have data
       const timeSinceLastLoad = Date.now() - lastLoadTime;
@@ -134,7 +140,7 @@ export const ReportsDashboard: React.FC = () => {
     };
 
     loadDashboardStats();
-  }, [user, isDashboardPage, refreshDashboardData]);
+  }, [user, isDashboardPage, refreshDashboardData, navigate]);
 
   // Handle visibility change with better logic
   useEffect(() => {

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Brain, Menu, X, User, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Header: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const { user, signOut, loading } = useAuth();
 
   const navigation = [
@@ -13,7 +14,7 @@ export const Header: React.FC = () => {
     { name: 'Dashboard', href: '/dashboard', protected: true },
     { name: 'About', href: '/about' },
     { name: 'Contact', href: '/contact' }
-  
+
   ];
 
   const filteredNavigation = navigation.filter(item => {
@@ -23,6 +24,33 @@ export const Header: React.FC = () => {
   });
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = async () => {
+    try {
+      // Close mobile menu if open
+      setIsMenuOpen(false);
+      
+      // Sign out user
+      await signOut();
+      
+      // Clear any stored data
+      localStorage.removeItem('selectedReports');
+      sessionStorage.clear();
+      
+      // Redirect to home page
+      navigate('/');
+      
+      // Force a page refresh to clear any cached state
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Still redirect even if there's an error
+      navigate('/');
+    }
+  };
 
   if (loading) {
     return (
@@ -37,7 +65,7 @@ export const Header: React.FC = () => {
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   Revyn
                 </h1>
-                <p className="text-xs text-gray-500 -mt-1">Your Business AI</p>
+                <p className="text-xs text-gray-500 -mt-1">Marketing AI</p>
               </div>
             </Link>
             <div className="animate-pulse bg-gray-200 h-8 w-20 rounded"></div>
@@ -60,7 +88,7 @@ export const Header: React.FC = () => {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 Revyn
               </h1>
-              <p className="text-xs text-gray-500 -mt-1">Your Business AI</p>
+              <p className="text-xs text-gray-500 -mt-1">Marketing AI</p>
             </div>
           </Link>
 
@@ -92,7 +120,7 @@ export const Header: React.FC = () => {
                   </span>
                 </div>
                 <button
-                  onClick={signOut}
+                  onClick={handleLogout}
                   className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                   title="Logout"
                 >
@@ -142,10 +170,7 @@ export const Header: React.FC = () => {
                     Signed in as {user.user_metadata?.name || user.email?.split('@')[0]}
                   </div>
                   <button
-                    onClick={() => {
-                      signOut();
-                      setIsMenuOpen(false);
-                    }}
+                    onClick={handleLogout}
                     className="block w-full text-left px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg font-medium"
                   >
                     Logout
