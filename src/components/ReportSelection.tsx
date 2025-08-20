@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
 import { ReportType } from '../types/reports';
 import { ShoppingCart, Check, Star, Clock, DollarSign, Lock, Mail, Bell, User, AlertCircle, CheckCircle } from 'lucide-react';
@@ -6,7 +7,7 @@ import { supabase } from '../config/supabase';
 
 interface ReportSelectionProps {
   onSelectReports: (reportIds: string[], isBundle: boolean) => void;
-  user?: any; // You can replace with proper User type from your auth context
+  user?: any;
 }
 
 interface StoredSelection {
@@ -16,6 +17,7 @@ interface StoredSelection {
 }
 
 export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReports, user }) => {
+  const navigate = useNavigate();
   const availableReports = reportTypes.filter(rt => rt.available);
   const comingSoonReports = reportTypes.filter(rt => !rt.available);
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
@@ -25,6 +27,7 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [purchasedReportIds, setPurchasedReportIds] = useState<string[]>([]);
   const [isLoadingPurchases, setIsLoadingPurchases] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   // Load user's purchased reports to prevent duplicate purchases
   useEffect(() => {
@@ -47,7 +50,6 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
           return;
         }
 
-        // Flatten all report IDs from all purchases
         const allPurchasedReportIds = purchases?.reduce((acc: string[], purchase) => {
           return acc.concat(purchase.report_ids || []);
         }, []) || [];
@@ -70,12 +72,10 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
       try {
         const { reportIds, isBundle: storedIsBundle, timestamp }: StoredSelection = JSON.parse(storedSelection);
         
-        // Check if selection is recent (within 1 hour)
         if (Date.now() - timestamp < 3600000) {
           setSelectedReports(reportIds);
           setIsBundle(storedIsBundle);
         } else {
-          // Clear expired selection
           localStorage.removeItem('selectedReports');
         }
       } catch (error) {
@@ -92,9 +92,8 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
       return;
     }
 
-    // Check if user already purchased this report
     if (purchasedReportIds.includes(reportId)) {
-      alert('You have already purchased this report. Check your dashboard to access it.');
+      navigate('/dashboard');
       return;
     }
     
@@ -103,7 +102,6 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
         ? prev.filter(id => id !== reportId)
         : [...prev, reportId];
       
-      // If user is not logged in, store the selection
       if (!user && newSelection.length > 0) {
         const selectionData: StoredSelection = {
           reportIds: newSelection,
@@ -120,30 +118,6 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
     setIsBundle(false);
   };
 
-  const handleBundleSelect = () => {
-    // Filter out already purchased reports
-    const availableForPurchase = availableReports.filter(rt => !purchasedReportIds.includes(rt.id));
-    
-    if (availableForPurchase.length === 0) {
-      alert('You have already purchased all available reports!');
-      return;
-    }
-
-    const allReportIds = availableForPurchase.map(rt => rt.id);
-    setSelectedReports(allReportIds);
-    setIsBundle(false); // Disable bundle for v1
-    
-    // If user is not logged in, store the selection
-    if (!user) {
-      const selectionData: StoredSelection = {
-        reportIds: allReportIds,
-        isBundle: false,
-        timestamp: Date.now()
-      };
-      localStorage.setItem('selectedReports', JSON.stringify(selectionData));
-    }
-  };
-
   const calculateTotal = () => {
     return selectedReports.length * individualPrice;
   };
@@ -151,19 +125,14 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
   const handleCheckout = () => {
     if (selectedReports.length === 0) return;
     
-    // Final check for duplicate purchases before checkout
     if (user) {
       const duplicateReports = selectedReports.filter(id => purchasedReportIds.includes(id));
       if (duplicateReports.length > 0) {
-        const duplicateNames = duplicateReports.map(id => 
-          reportTypes.find(rt => rt.id === id)?.name
-        ).join(', ');
-        alert(`You have already purchased: ${duplicateNames}. Please remove them from your selection.`);
+        navigate('/dashboard');
         return;
       }
     }
     
-    // Always call onSelectReports - it will handle the login flow internally
     if (typeof onSelectReports === 'function') {
       onSelectReports(selectedReports, false);
     } else {
@@ -171,25 +140,16 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
     }
   };
 
-  const handleLoginPromptConfirm = () => {
-    setShowLoginPrompt(false);
-    // Just call the regular checkout flow
-    handleCheckout();
-  };
-
-  const handleLoginPromptCancel = () => {
-    setShowLoginPrompt(false);
-    // Keep the selection but don't proceed
-  };
-
   const handleWaitlistSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // In production, save to database
     console.log('Waitlist signup:', waitlistEmail);
     setWaitlistEmail('');
     setShowWaitlistModal(false);
-    // Show success message
-    alert('Thanks! We\'ll notify you when this report becomes available.');
+    
+    setShowSuccessToast(true);
+    setTimeout(() => {
+      setShowSuccessToast(false);
+    }, 4000);
   };
 
   return (
@@ -238,15 +198,22 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                   key={report.id}
                   className={`bg-white rounded-2xl shadow-xl p-8 border-2 transition-all duration-200 relative ${
                     isAlreadyPurchased
-                      ? 'border-green-200 bg-green-50 cursor-not-allowed opacity-75'
+                      ? 'border-green-200 bg-gradient-to-br from-green-50 to-emerald-50 cursor-pointer hover:shadow-2xl hover:-translate-y-0.5'
                       : isSelected
                       ? 'border-blue-500 shadow-2xl transform -translate-y-1 cursor-pointer'
                       : 'border-gray-200 hover:border-blue-300 hover:shadow-2xl hover:-translate-y-0.5 cursor-pointer'
                   }`}
-                  onClick={() => !isAlreadyPurchased && handleReportToggle(report.id)}
+                  onClick={() => {
+                    if (isAlreadyPurchased) {
+                      navigate('/dashboard');
+                    } else {
+                      handleReportToggle(report.id);
+                    }
+                  }}
                 >
                   {isAlreadyPurchased && (
-                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
+                    <div className="absolute top-4 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center">
+                      <CheckCircle className="w-3 h-3 mr-1" />
                       Purchased
                     </div>
                   )}
@@ -291,9 +258,15 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                   
                   <div className="text-center">
                     {isAlreadyPurchased ? (
-                      <div className="text-green-600 font-bold">
-                        Already Purchased
-                      </div>
+                      <button 
+                        className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-green-700 transition-colors w-full"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/dashboard');
+                        }}
+                      >
+                        Access Report
+                      </button>
                     ) : (
                       <span className="text-2xl font-bold text-gray-900">
                         ${report.price}
@@ -321,21 +294,28 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                 className="bg-white rounded-2xl shadow-xl p-8 border-2 border-gray-200 relative overflow-hidden cursor-pointer hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-200"
                 onClick={() => setShowWaitlistModal(true)}
               >
-                {/* Coming Soon Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-br from-gray-50/90 to-gray-100/90 backdrop-blur-sm flex items-center justify-center">
-                  <div className="text-center">
-                    <div className="p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full mb-4 mx-auto w-fit">
-                      <Lock className="w-8 h-8 text-white" />
+                {/* Coming Soon Overlay - Reduced blur and opacity */}
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-[0.5px] flex items-center justify-center z-10">
+                  <div className="text-center p-4">
+                    <div className="p-3 bg-gradient-to-r from-slate-400 to-slate-500 rounded-xl mb-3 mx-auto w-fit shadow-md">
+                      <Lock className="w-6 h-6 text-white" />
                     </div>
-                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-full text-sm font-bold mb-2">
+                    <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-1.5 rounded-full text-xs font-bold mb-3 shadow-sm">
                       COMING SOON
                     </div>
-                    <button className="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-50 transition-colors text-sm">
+                    <button 
+                      className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors text-xs border border-blue-200 shadow-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowWaitlistModal(true);
+                      }}
+                    >
                       Join Waitlist
                     </button>
                   </div>
                 </div>
                 
+                {/* Background Content - More visible */}
                 <div className="opacity-60">
                   <div className="flex justify-between items-start mb-4">
                     <div className="p-3 bg-gradient-to-r from-blue-100 to-purple-100 rounded-xl">
@@ -401,7 +381,6 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                 <button
                   onClick={() => {
                     if (!user) {
-                      // Store selection in localStorage before showing prompt
                       const selectionData: StoredSelection = {
                         reportIds: selectedReports,
                         isBundle: false,
@@ -427,23 +406,29 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
           </div>
         )}
 
-        {/* Already Purchased Reports Info */}
-        {user && purchasedReportIds.length > 0 && !isLoadingPurchases && (
-          <div className="bg-green-50 border border-green-200 rounded-2xl p-6 mb-8">
-            <div className="flex items-start">
-              <CheckCircle className="w-6 h-6 text-green-600 mr-3 mt-1 flex-shrink-0" />
-              <div>
-                <h3 className="text-lg font-semibold text-green-800 mb-2">Reports You Own</h3>
-                <p className="text-green-700 mb-3">
-                  You have already purchased: {purchasedReportIds.map(id => 
-                    reportTypes.find(rt => rt.id === id)?.name
-                  ).filter(Boolean).join(', ')}
-                </p>
+        {/* Success Toast Notification */}
+        {showSuccessToast && (
+          <div className="fixed top-4 right-4 z-[60]">
+            <div className="bg-white border border-green-200 rounded-xl shadow-2xl p-6 max-w-md animate-in slide-in-from-right duration-300">
+              <div className="flex items-start space-x-4">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-1">
+                    You're on the waitlist! 🎉
+                  </h4>
+                  <p className="text-gray-600 text-sm">
+                    Thanks! We'll notify you when this report becomes available.
+                  </p>
+                </div>
                 <button
-                  onClick={() => navigate('/dashboard')}
-                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors"
+                  onClick={() => setShowSuccessToast(false)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
-                  View in Dashboard
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -478,13 +463,16 @@ export const ReportSelection: React.FC<ReportSelectionProps> = ({ onSelectReport
                 <div className="flex space-x-3">
                   <button
                     type="button"
-                    onClick={handleLoginPromptCancel}
+                    onClick={() => setShowLoginPrompt(false)}
                     className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
-                    onClick={handleLoginPromptConfirm}
+                    onClick={() => {
+                      setShowLoginPrompt(false);
+                      handleCheckout();
+                    }}
                     className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-3 rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
                   >
                     Login Now

@@ -46,7 +46,7 @@ export const Contact: React.FC = () => {
     {
       icon: <Mail className="w-6 h-6" />,
       title: "Email Us",
-      details: "hello@revyn.ai",
+      details: "kasey@clientric.co",
       description: "Send us an email anytime"
     },
     {
@@ -257,10 +257,10 @@ export const Contact: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900 mb-2">
-                    Is the audit really free?
+                    What happens after I submit my inquiry?
                   </h3>
                   <p className="text-gray-600 text-sm">
-                    Yes! Our basic marketing audit is completely free with no hidden costs.
+                    Our team will review your message and respond within 24 hours with next steps.
                   </p>
                 </div>
                 <div>

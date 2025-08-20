@@ -26,31 +26,10 @@ export const About: React.FC = () => {
   ];
 
   const stats = [
-    { number: "10,000+", label: "Companies Audited" },
-    { number: "85%", label: "Average Score Improvement" },
-    { number: "50+", label: "Marketing Categories" },
-    { number: "24/7", label: "AI-Powered Support" }
-  ];
-
-  const team = [
-    {
-      name: "Sarah Johnson",
-      role: "CEO & Founder",
-      image: "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=400",
-      bio: "Former VP of Marketing at Fortune 500 companies with 15+ years of experience."
-    },
-    {
-      name: "Michael Chen",
-      role: "CTO",
-      image: "https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?auto=compress&cs=tinysrgb&w=400",
-      bio: "AI researcher and engineer with expertise in machine learning and data analytics."
-    },
-    {
-      name: "Emily Rodriguez",
-      role: "Head of Marketing",
-      image: "https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?auto=compress&cs=tinysrgb&w=400",
-      bio: "Digital marketing strategist specializing in growth hacking and performance marketing."
-    }
+    { number: "∞", label: "Growth Potential" },
+    { number: "AI-First", label: "Technology Stack" },
+    { number: "360°", label: "Marketing Coverage" },
+    { number: "Real-Time", label: "Insights Delivery" }
   ];
 
   return (
@@ -142,27 +121,25 @@ export const About: React.FC = () => {
           <h2 className="text-3xl font-bold text-center text-gray-900 mb-12">
             Meet Our Team
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {team.map((member, index) => (
-              <div key={index} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-                <img
-                  src={member.image}
-                  alt={member.name}
-                  className="w-full h-64 object-cover"
-                />
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-1">
-                    {member.name}
-                  </h3>
-                  <p className="text-blue-600 font-medium mb-3">
-                    {member.role}
-                  </p>
-                  <p className="text-gray-600 text-sm leading-relaxed">
-                    {member.bio}
-                  </p>
-                </div>
+          <div className="flex justify-center">
+            <div className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow max-w-sm">
+              <img
+                src="https://revyn-images-development.zohostratus.com/1651263907494.jpeg"
+                alt="CEO & Founder"
+                className="w-full h-80 object-cover object-top"
+              />
+              <div className="p-6 text-center">
+                <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                  CEO & Founder
+                </h3>
+                <p className="text-blue-600 font-medium mb-3">
+                  Leadership
+                </p>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  Visionary leader driving innovation in marketing technology and AI-powered business solutions.
+                </p>
               </div>
-            ))}
+            </div>
           </div>
         </div>
 
@@ -175,12 +152,12 @@ export const About: React.FC = () => {
             Join thousands of companies who have improved their marketing performance with Revyn's AI-powered insights.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200">
-              Start Free Audit
-            </button>
-            <button className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors">
+            <a href="/" className="px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 text-center no-underline">
+              Start Audit
+            </a>
+            <a href="/contact" className="px-8 py-4 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors text-center no-underline">
               Schedule Demo
-            </button>
+            </a>
           </div>
         </div>
       </div>

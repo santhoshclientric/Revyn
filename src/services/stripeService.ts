@@ -12,7 +12,7 @@ export interface PaymentIntentData {
 export class StripeService {
   private static instance: StripeService;
   private stripe: Stripe | null = null;
-  private apiUrl: string =  import.meta.env.VITE_API_URL || process.env.VITE_API_URL || 'http://localhost:3001';
+  private apiUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:3001';
   
   static getInstance(): StripeService {
     if (!StripeService.instance) {

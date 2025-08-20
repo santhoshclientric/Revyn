@@ -10,9 +10,10 @@ export const Header: React.FC = () => {
 
   const navigation = [
     { name: 'Home', href: '/', public: true },
-    { name: 'About', href: '/about' },
-    { name: 'Contact', href: '/contact' },
     { name: 'Dashboard', href: '/dashboard', protected: true },
+    { name: 'About', href: '/about' },
+    { name: 'Contact', href: '/contact' }
+  
   ];
 
   const filteredNavigation = navigation.filter(item => {
@@ -36,7 +37,7 @@ export const Header: React.FC = () => {
                 <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                   Revyn
                 </h1>
-                <p className="text-xs text-gray-500 -mt-1">Marketing AI</p>
+                <p className="text-xs text-gray-500 -mt-1">Your Business AI</p>
               </div>
             </Link>
             <div className="animate-pulse bg-gray-200 h-8 w-20 rounded"></div>
@@ -59,7 +60,7 @@ export const Header: React.FC = () => {
               <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 Revyn
               </h1>
-              <p className="text-xs text-gray-500 -mt-1">Marketing AI</p>
+              <p className="text-xs text-gray-500 -mt-1">Your Business AI</p>
             </div>
           </Link>
 

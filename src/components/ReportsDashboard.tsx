@@ -11,7 +11,7 @@ import { reportTypes } from '../data/reportTypes';
 import { ReportSubmission, GeneratedReport, ReportAnswer } from '../types/reports';
 import { AIService } from '../services/aiService';
 import { StripeService } from '../services/stripeService';
-import { Brain, Loader, CheckCircle, DollarSign, ShoppingCart } from 'lucide-react';
+import { Brain, Loader, CheckCircle, DollarSign, ShoppingCart, Eye, Clock, AlertCircle, FileText, RefreshCw } from 'lucide-react';
 
 type ViewState = 'selection' | 'payment' | 'form' | 'processing' | 'report' | 'chat';
 
@@ -19,6 +19,18 @@ interface StoredSelection {
   reportIds: string[];
   isBundle: boolean;
   timestamp: number;
+}
+
+interface Purchase {
+  id: string;
+  user_id: string;
+  report_ids: string[];
+  amount: number;
+  status: string;
+  report_status: string;
+  created_at: string;
+  stripe_payment_id: string;
+  answeredQuestions?: number;
 }
 
 export const ReportsDashboard: React.FC = () => {
@@ -42,8 +54,9 @@ export const ReportsDashboard: React.FC = () => {
     processingReports: 0,
     totalSpent: 0
   });
-  const [userPurchases, setUserPurchases] = useState<any[]>([]);
+  const [userPurchases, setUserPurchases] = useState<Purchase[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [lastLoadTime, setLastLoadTime] = useState<number>(0);
 
   const aiService = AIService.getInstance();
   const stripeService = StripeService.getInstance();
@@ -52,62 +65,123 @@ export const ReportsDashboard: React.FC = () => {
   const isDashboardPage = location.pathname === '/dashboard';
   const isReportsPage = location.pathname === '/reports' || location.pathname === '/';
 
+  // Force refresh data (can be called manually)
+  const refreshDashboardData = useCallback(async () => {
+    if (!user || !isDashboardPage) return;
+    
+    console.log('Refreshing dashboard data...');
+    setIsLoadingStats(true);
+    
+    try {
+      // Fetch user's purchases
+      const { data: purchases, error: purchasesError } = await supabase
+        .from('purchases')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false });
+
+      if (purchasesError) {
+        console.error('Error fetching purchases:', purchasesError);
+        return;
+      }
+
+      // Calculate stats based on the new status values
+      const totalPurchases = purchases?.length || 0;
+      const totalSpent = purchases?.reduce((sum, purchase) => sum + purchase.amount, 0) || 0;
+      const completedReports = purchases?.filter(p => p.report_status === 'ai_audit_completed').length || 0;
+      const processingReports = purchases?.filter(p => 
+        p.report_status === 'form_completed' || p.report_status === 'form_started'
+      ).length || 0;
+
+      setDashboardStats({
+        totalPurchases,
+        completedReports,
+        processingReports,
+        totalSpent
+      });
+
+      setUserPurchases(purchases || []);
+      setLastLoadTime(Date.now());
+      console.log('Dashboard data refreshed successfully');
+      
+    } catch (error) {
+      console.error('Error refreshing dashboard stats:', error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, [user, isDashboardPage]);
+
   // Load dashboard stats when user changes or component mounts
   useEffect(() => {
     const loadDashboardStats = async () => {
       if (!user || !isDashboardPage) return;
       
-      setIsLoadingStats(true);
-      try {
-        // Fetch user's purchases
-        const { data: purchases, error: purchasesError } = await supabase
-          .from('purchases')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('status', 'completed')
-          .order('created_at', { ascending: false });
-
-        if (purchasesError) {
-          console.error('Error fetching purchases:', purchasesError);
-          return;
-        }
-
-        // Fetch user's report submissions
-        const { data: reportSubmissions, error: submissionsError } = await supabase
-          .from('report_submissions')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-
-        if (submissionsError) {
-          console.error('Error fetching submissions:', submissionsError);
-          return;
-        }
-
-        // Calculate stats
-        const totalPurchases = purchases?.length || 0;
-        const totalSpent = purchases?.reduce((sum, purchase) => sum + purchase.amount, 0) || 0;
-        const completedReports = reportSubmissions?.filter(sub => sub.status === 'completed').length || 0;
-        const processingReports = reportSubmissions?.filter(sub => sub.status === 'processing').length || 0;
-
-        setDashboardStats({
-          totalPurchases,
-          completedReports,
-          processingReports,
-          totalSpent
-        });
-
-        setUserPurchases(purchases || []);
-        
-      } catch (error) {
-        console.error('Error loading dashboard stats:', error);
-      } finally {
-        setIsLoadingStats(false);
+      // Don't reload if we recently loaded data (within 30 seconds) and have data
+      const timeSinceLastLoad = Date.now() - lastLoadTime;
+      if (userPurchases.length > 0 && timeSinceLastLoad < 30000 && !document.hidden) {
+        console.log('Using cached dashboard data, skipping reload');
+        return;
       }
+      
+      // Don't load when tab is hidden
+      if (document.hidden) {
+        console.log('Tab is hidden, skipping data load');
+        return;
+      }
+      
+      await refreshDashboardData();
     };
 
     loadDashboardStats();
-  }, [user, isDashboardPage]);
+  }, [user, isDashboardPage, refreshDashboardData]);
+
+  // Handle visibility change with better logic
+  useEffect(() => {
+    let visibilityChangeTimeout: NodeJS.Timeout;
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        console.log('Dashboard tab hidden - preserving data');
+        // Clear any pending timeout when tab becomes hidden
+        if (visibilityChangeTimeout) {
+          clearTimeout(visibilityChangeTimeout);
+        }
+      } else {
+        console.log('Dashboard tab visible - checking if refresh needed');
+        
+        // Only refresh if there are purchases with form_completed status (might change to ai_audit_completed)
+        const hasProcessingReports = userPurchases.some(purchase => 
+          purchase.report_status === 'form_completed'
+        );
+        
+        if (!hasProcessingReports) {
+          console.log('No processing reports found, skipping auto-refresh');
+          return;
+        }
+        
+        // Only refresh if data is stale (older than 60 seconds) when tab becomes visible
+        visibilityChangeTimeout = setTimeout(() => {
+          const timeSinceLastLoad = Date.now() - lastLoadTime;
+          if (timeSinceLastLoad > 60000 && userPurchases.length > 0) {
+            console.log('Data is stale and has processing reports, refreshing on tab focus');
+            refreshDashboardData();
+          } else {
+            console.log('Data is recent or no stale processing reports, using cached data');
+          }
+        }, 1000); // Small delay to prevent immediate refresh
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (visibilityChangeTimeout) {
+        clearTimeout(visibilityChangeTimeout);
+      }
+    };
+  }, [lastLoadTime, userPurchases, refreshDashboardData]);
 
   // Check for stored selections on component mount and when user changes
   useEffect(() => {
@@ -229,7 +303,10 @@ export const ReportsDashboard: React.FC = () => {
             report_ids: selectedReportIds,
             amount: selectedReportIds.length * 125, // $125 per report
             stripe_payment_id: paymentIntentId,
-            status: 'completed'
+            status: 'completed',
+            report_status: 'not_started',
+            company_name: null, // Will be filled when user submits company form
+            company_email: user.email
           })
           .select()
           .single();
@@ -256,10 +333,10 @@ export const ReportsDashboard: React.FC = () => {
     
     const submission: ReportSubmission = {
       id: `sub_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      userId: user?.id || 'user_123', // Use actual user ID from auth context
+      userId: user?.id || 'user_123',
       reportTypeId: currentReportId,
-      companyName: 'Demo Company', // Get from form
-      email: user?.email || 'demo@company.com', // Get from auth context or form
+      companyName: 'Demo Company',
+      email: user?.email || 'demo@company.com',
       answers,
       status: 'processing',
       createdAt: new Date().toISOString(),
@@ -367,8 +444,139 @@ export const ReportsDashboard: React.FC = () => {
   };
 
   const handlePurchaseNewReport = () => {
-    // Navigate to the reports selection page
     navigate('/reports');
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'ai_audit_completed':
+        return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'form_completed':
+        return <CheckCircle className="w-5 h-5 text-blue-600" />;
+      case 'failed':
+        return <AlertCircle className="w-5 h-5 text-red-600" />;
+      default:
+        return null;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'ai_audit_completed':
+        return 'text-green-600 bg-green-100';
+      case 'form_completed':
+        return 'text-blue-600 bg-blue-100';
+      case 'failed':
+        return 'text-red-600 bg-red-100';
+      default:
+        return '';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'ai_audit_completed':
+        return 'Report Ready';
+      case 'form_completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      default:
+        return '';
+    }
+  };
+
+  const shouldShowStatus = (status: string) => {
+    // Only show status badge for form_completed and ai_audit_completed
+    return status === 'form_completed' || status === 'ai_audit_completed' || status === 'failed';
+  };
+
+  const getActionButton = (purchase: Purchase) => {
+    const { report_status, answeredQuestions = 0 } = purchase;
+    
+    switch (report_status) {
+      case 'ai_audit_completed':
+        return (
+          <button 
+            onClick={() => navigate('/report-view', { state: { purchaseId: purchase.id } })}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 transition-colors flex items-center"
+          >
+            <Eye className="w-4 h-4 mr-2" />
+            View Report
+          </button>
+        );
+        
+      case 'form_completed':
+        return (
+          <div className="flex flex-col items-end space-y-2">
+            <span className="text-blue-600 text-sm font-medium flex items-center">
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Completed
+            </span>
+            <span className="text-orange-600 text-sm font-medium flex items-center">
+              <Clock className="w-4 h-4 mr-2 animate-spin" />
+              Processing Audit Report
+            </span>
+          </div>
+        );
+        
+      case 'form_started':
+        return (
+          <button 
+            onClick={() => navigate(`/form/${purchase.report_ids[0]}`, {
+              state: {
+                purchaseId: purchase.id,
+                source: 'dashboard',
+                reportIds: purchase.report_ids
+              }
+            })}
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors flex items-center"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Continue Report
+          </button>
+        );
+        
+      case 'failed':
+        return (
+          <div className="flex flex-col items-end space-y-2">
+            <span className="text-red-600 text-sm font-medium flex items-center">
+              <AlertCircle className="w-4 h-4 mr-2" />
+              Failed
+            </span>
+            <button 
+              onClick={() => navigate(`/form/${purchase.report_ids[0]}`, {
+                state: {
+                  purchaseId: purchase.id,
+                  source: 'dashboard',
+                  reportIds: purchase.report_ids
+                }
+              })}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium hover:bg-blue-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        );
+        
+      case 'not_started':
+      default:
+        return (
+          <button 
+            onClick={() => navigate(`/form/${purchase.report_ids[0]}`, {
+              state: {
+                purchaseId: purchase.id,
+                source: 'dashboard',
+                reportIds: purchase.report_ids
+              }
+            })}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Start Report
+          </button>
+        );
+    }
   };
 
   // If we're on the dashboard page, show the dashboard content
@@ -446,7 +654,10 @@ export const ReportsDashboard: React.FC = () => {
                 <ShoppingCart className="w-5 h-5 mr-2" />
                 Purchase New Report
               </button>
-              <button className="border-2 border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors">
+              <button 
+                onClick={() => navigate('/')}
+                className="border-2 border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-colors"
+              >
                 Learn More
               </button>
             </div>
@@ -454,7 +665,17 @@ export const ReportsDashboard: React.FC = () => {
 
           {/* Your Reports Section */}
           <div className="bg-white rounded-xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Your Reports</h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Your Reports</h2>
+              <button
+                onClick={refreshDashboardData}
+                disabled={isLoadingStats}
+                className="flex items-center px-4 py-2 text-sm font-medium text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingStats ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
             
             {isLoadingStats ? (
               <div className="text-center py-8">
@@ -467,9 +688,19 @@ export const ReportsDashboard: React.FC = () => {
                   <div key={purchase.id} className="border border-gray-200 rounded-xl p-6">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-semibold text-gray-900 mb-2">
-                          Purchase #{purchase.id.slice(-8)}
-                        </h3>
+                        <div className="flex items-center space-x-3 mb-2">
+                          <h3 className="font-semibold text-gray-900 mb-1">
+                            Purchase #{purchase.stripe_payment_id?.slice(-8) || purchase.id.slice(-8)}
+                          </h3>
+                          {shouldShowStatus(purchase.report_status) && (
+                            <div className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(purchase.report_status)}`}>
+                              <div className="flex items-center space-x-1">
+                                {getStatusIcon(purchase.report_status)}
+                                <span>{getStatusText(purchase.report_status)}</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600 mb-2">
                           {purchase.report_ids?.map((id: string) => 
                             reportTypes.find(rt => rt.id === id)?.name
@@ -480,21 +711,8 @@ export const ReportsDashboard: React.FC = () => {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-gray-900">${purchase.amount}</p>
-                        <div className="mt-2">
-                          <button 
-                            onClick={() => navigate(`/form/${purchase.report_ids[0]}`, {
-                              state: {
-                                purchaseId: purchase.id,
-                                source: 'dashboard',
-                                reportIds: purchase.report_ids
-                              }
-                            })}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                          >
-                            Start Report
-                          </button>
-                        </div>
+                        <p className="text-lg font-bold text-gray-900 mb-3">${purchase.amount}</p>
+                        {getActionButton(purchase)}
                       </div>
                     </div>
                   </div>
@@ -520,14 +738,4 @@ export const ReportsDashboard: React.FC = () => {
       </div>
     );
   }
-
-  // Otherwise, show the reports selection page
-  return (
-    <div className="py-8">
-      <ReportSelection 
-        onSelectReports={handleReportSelection}
-        user={user}
-      />
-    </div>
-  );
-};
+}

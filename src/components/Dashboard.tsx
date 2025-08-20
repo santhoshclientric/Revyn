@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { AuditForm } from './AuditForm';
 import { AuditResults } from './AuditResults';
 import { AuditSubmission } from '../types/audit';
@@ -7,11 +8,16 @@ import { Brain, BarChart3, Users, Zap, ArrowRight, CheckCircle, Star } from 'luc
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [currentView, setCurrentView] = useState<'welcome' | 'audit' | 'results'>('welcome');
   const [auditSubmission, setAuditSubmission] = useState<AuditSubmission | null>(null);
 
   const handleStartAudit = () => {
-    setCurrentView('audit');
+    if (!user) {
+      navigate('/login');
+    } else {
+      navigate('/reports');
+    }
   };
 
   const handleAuditComplete = (submission: AuditSubmission) => {
@@ -25,7 +31,11 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleGoToReports = () => {
-    navigate('/reports');
+    if (!user) {
+      navigate('/login');
+    } else {
+      navigate('/reports');
+    }
   };
 
   if (currentView === 'audit') {
@@ -60,7 +70,7 @@ export const Dashboard: React.FC = () => {
           </h1>
           
           <p className="text-xl text-gray-600 mb-10 max-w-3xl mx-auto leading-relaxed">
-            Discover your marketing maturity level with our comprehensive 80-question audit. 
+            Discover your marketing maturity level with our comprehensive AI audit. 
             Get <strong>actionable insights</strong> and personalized recommendations to transform your marketing performance.
           </p>
           
@@ -72,7 +82,7 @@ export const Dashboard: React.FC = () => {
               Start Your Marketing Audit
               <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
             </button>
-            <button 
+            <button
               onClick={handleGoToReports}
               className="border-2 border-blue-600 text-blue-600 px-10 py-4 rounded-xl text-lg font-semibold hover:bg-blue-50 transition-all duration-300"
             >
@@ -85,28 +95,11 @@ export const Dashboard: React.FC = () => {
               <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
               15-20 minutes
             </div>
-            <div className="flex items-center">
-              <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
-              Completely free
-            </div>
+           
             <div className="flex items-center">
               <CheckCircle className="w-4 h-4 text-green-500 mr-2" />
               Instant results
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Social Proof */}
-      <section className="py-12 px-4 bg-white/50 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto text-center">
-          <p className="text-gray-600 mb-8">Trusted by over 10,000+ companies worldwide</p>
-          <div className="flex items-center justify-center space-x-8 opacity-60">
-            <div className="text-2xl font-bold text-gray-400">TechCorp</div>
-            <div className="text-2xl font-bold text-gray-400">InnovateCo</div>
-            <div className="text-2xl font-bold text-gray-400">GrowthLab</div>
-            <div className="text-2xl font-bold text-gray-400">ScaleUp</div>
-            <div className="text-2xl font-bold text-gray-400">MarketPro</div>
           </div>
         </div>
       </section>
@@ -194,55 +187,6 @@ export const Dashboard: React.FC = () => {
                   {category === 'Technology & Tools' && '8 questions about marketing technology stack and integration.'}
                   {category === 'Team & Resources' && '7 questions on team structure, skills, and resources.'}
                 </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-20 px-4 bg-white/80 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-center text-gray-900 mb-16">
-            What Our Users Say
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                name: "Sarah Johnson",
-                role: "Marketing Director",
-                company: "TechCorp",
-                content: "The audit revealed gaps we didn't even know existed. Our marketing ROI improved by 40% after implementing the recommendations.",
-                rating: 5
-              },
-              {
-                name: "Michael Chen",
-                role: "CEO",
-                company: "StartupXYZ",
-                content: "Incredibly detailed analysis that helped us prioritize our marketing investments. The insights were spot-on and actionable.",
-                rating: 5
-              },
-              {
-                name: "Emily Rodriguez",
-                role: "Growth Manager",
-                company: "ScaleUp Inc",
-                content: "Best marketing audit tool I've used. The AI recommendations were surprisingly accurate and helped us optimize our entire funnel.",
-                rating: 5
-              }
-            ].map((testimonial, index) => (
-              <div key={index} className="bg-white p-8 rounded-2xl shadow-xl">
-                <div className="flex items-center mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} className="w-5 h-5 text-yellow-400 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-6 italic leading-relaxed">
-                  "{testimonial.content}"
-                </p>
-                <div>
-                  <p className="font-semibold text-gray-900">{testimonial.name}</p>
-                  <p className="text-sm text-gray-500">{testimonial.role} at {testimonial.company}</p>
-                </div>
               </div>
             ))}
           </div>

@@ -15,7 +15,7 @@ export const Footer: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-xl font-bold">Revyn</h3>
-                <p className="text-sm text-gray-400">Marketing AI</p>
+                <p className="text-sm text-gray-400">Your Business AI</p>
               </div>
             </div>
             <p className="text-gray-300 mb-6 max-w-md">

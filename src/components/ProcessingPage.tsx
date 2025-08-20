@@ -52,6 +52,22 @@ export const ProcessingPage: React.FC = () => {
 
       if (submissionError) throw submissionError;
 
+      // Update purchase status to form_completed first
+      if (purchaseId) {
+        const { error: purchaseUpdateError } = await supabase
+          .from('purchases')
+          .update({ report_status: 'form_completed' })
+          .eq('id', purchaseId)
+          .eq('user_id', user!.id);
+
+        if (purchaseUpdateError) {
+          console.error('Error updating purchase to form_completed:', purchaseUpdateError);
+        }
+      }
+
+      // Short delay to show "Completed" status, then start generation
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       // Generate report
       const report = await aiService.generateReport(submission);
 
@@ -68,6 +84,19 @@ export const ProcessingPage: React.FC = () => {
 
       if (updateError) throw updateError;
 
+      // Update purchase status to ai_audit_completed
+      if (purchaseId) {
+        const { error: purchaseCompleteError } = await supabase
+          .from('purchases')
+          .update({ report_status: 'ai_audit_completed' })
+          .eq('id', purchaseId)
+          .eq('user_id', user!.id);
+
+        if (purchaseCompleteError) {
+          console.error('Error updating purchase to ai_audit_completed:', purchaseCompleteError);
+        }
+      }
+
       // Navigate to dashboard
       navigate('/dashboard');
     } catch (error) {
@@ -81,6 +110,13 @@ export const ProcessingPage: React.FC = () => {
           .eq('user_id', user.id)
           .eq('report_type_id', reportId)
           .eq('purchase_id', purchaseId);
+
+        // Update purchase status to failed
+        await supabase
+          .from('purchases')
+          .update({ report_status: 'failed' })
+          .eq('id', purchaseId)
+          .eq('user_id', user.id);
       }
       
       navigate('/dashboard');
