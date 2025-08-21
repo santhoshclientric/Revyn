@@ -80,46 +80,54 @@ export const ReportForm: React.FC = () => {
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
   const [tempAnswer, setTempAnswer] = useState<Answer | null>(null);
   const [companyInfo, setCompanyInfo] = useState({ companyName: '', email: '' });
-  const [showCompanyForm, setShowCompanyForm] = useState(true);
+  const [showCompanyForm, setShowCompanyForm] = useState(true); // Default to true - always show form first
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [hasLoadedInitialData, setHasLoadedInitialData] = useState(false);
+  const [companyInfoChecked, setCompanyInfoChecked] = useState(false); // Track if we've checked company info
 
   // Initialize company info with user data and check if we should skip company form
   useEffect(() => {
     const loadCompanyInfo = async () => {
-      if (user) {
+      if (!user) {
+        setCompanyInfoChecked(true);
+        return;
+      }
+
+      try {
         // Always try to load company info from purchases table first
         if (currentPurchaseId) {
-          try {
-            const { data: purchase, error } = await supabase
-              .from('purchases')
-              .select('company_name, company_email')
-              .eq('id', currentPurchaseId)
-              .eq('user_id', user.id)
-              .single();
+          const { data: purchase, error } = await supabase
+            .from('purchases')
+            .select('company_name, company_email')
+            .eq('id', currentPurchaseId)
+            .eq('user_id', user.id)
+            .single();
 
-            if (!error && purchase && purchase.company_name && purchase.company_name !== 'Demo Company') {
-              // Company info exists, skip company form
-              setCompanyInfo({
-                companyName: purchase.company_name,
-                email: purchase.company_email || user.email || ''
-              });
-              console.log('Loaded existing company info from purchases:', purchase);
+          if (!error && purchase) {
+            // Set company info from purchase
+            setCompanyInfo({
+              companyName: purchase.company_name || '',
+              email: purchase.company_email || user.email || ''
+            });
+
+            // Only skip company form if we have valid company data that's not the default
+            if (purchase.company_name && 
+                purchase.company_name.trim() !== '' && 
+                purchase.company_name !== 'Demo Company' &&
+                purchase.company_email &&
+                purchase.company_email.trim() !== '') {
+              console.log('Valid company info found, skipping company form:', purchase);
               setShowCompanyForm(false);
             } else {
-              // Company info missing or is default, show company form
-              setCompanyInfo({
-                companyName: purchase?.company_name || '',
-                email: purchase?.company_email || user.email || ''
-              });
-              console.log('Company info missing or default, showing company form');
+              console.log('Invalid or default company info, showing company form:', purchase);
               setShowCompanyForm(true);
             }
-          } catch (error) {
-            console.error('Error loading company info:', error);
+          } else {
+            console.log('No purchase found or error, showing company form:', error);
+            // No purchase found or error, show company form with user defaults
             setCompanyInfo({
               companyName: '',
               email: user.email || ''
@@ -127,6 +135,7 @@ export const ReportForm: React.FC = () => {
             setShowCompanyForm(true);
           }
         } else {
+          console.log('No purchase ID, showing company form');
           // No purchase ID, show company form
           setCompanyInfo({
             companyName: '',
@@ -134,15 +143,33 @@ export const ReportForm: React.FC = () => {
           });
           setShowCompanyForm(true);
         }
+      } catch (error) {
+        console.error('Error loading company info:', error);
+        setCompanyInfo({
+          companyName: '',
+          email: user.email || ''
+        });
+        setShowCompanyForm(true);
+      } finally {
+        setCompanyInfoChecked(true);
       }
     };
 
-    loadCompanyInfo();
-  }, [user, currentPurchaseId]);
+    // Only load company info once
+    if (!companyInfoChecked) {
+      loadCompanyInfo();
+    }
+  }, [user, currentPurchaseId, companyInfoChecked]);
 
   // Load questions from database
   useEffect(() => {
     const loadQuestions = async () => {
+      // Don't load questions until company info has been checked
+      if (!companyInfoChecked) {
+        return;
+      }
+
+      // Don't reload if we already have questions and this isn't a fresh load
       if (hasLoadedInitialData && questions.length > 0 && !document.hidden) {
         return;
       }
@@ -161,8 +188,8 @@ export const ReportForm: React.FC = () => {
 
         setQuestions(questionsData || []);
         
-        // Load existing answers if user is continuing a form
-        if (user && currentPurchaseId) {
+        // Only load existing answers if we're not showing the company form
+        if (user && currentPurchaseId && !showCompanyForm) {
           const { data: existingAnswers, error: answersError } = await supabase
             .from('answers')
             .select('*')
@@ -198,10 +225,6 @@ export const ReportForm: React.FC = () => {
               
               setCurrentQuestionIndex(resumeIndex);
             }
-
-            setShowCompanyForm(false);
-          } else if (source === 'dashboard' && currentPurchaseId) {
-            setShowCompanyForm(false);
           }
         }
         
@@ -213,10 +236,8 @@ export const ReportForm: React.FC = () => {
       }
     };
 
-    if (!hasLoadedInitialData) {
-      loadQuestions();
-    }
-  }, [user, currentPurchaseId, hasLoadedInitialData, source]);
+    loadQuestions();
+  }, [user, currentPurchaseId, companyInfoChecked, showCompanyForm, hasLoadedInitialData, source]);
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = questions.length > 0 ? ((currentQuestionIndex + 1) / questions.length) * 100 : 0;
@@ -225,9 +246,10 @@ export const ReportForm: React.FC = () => {
   const handleCompanyInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (companyInfo.companyName && companyInfo.email) {
+      // Save company info to database if we have a purchase ID
       if (user && currentPurchaseId && companyInfo.companyName !== 'Demo Company') {
         try {
-          await supabase
+          const { error } = await supabase
             .from('purchases')
             .update({ 
               company_name: companyInfo.companyName,
@@ -235,11 +257,18 @@ export const ReportForm: React.FC = () => {
             })
             .eq('id', currentPurchaseId)
             .eq('user_id', user.id);
+          
+          if (error) {
+            console.error('Error saving company info:', error);
+          } else {
+            console.log('Company info saved successfully');
+          }
         } catch (error) {
           console.error('Error saving company info:', error);
         }
       }
       
+      // Hide the company form and proceed to questions
       setShowCompanyForm(false);
     }
   };
@@ -475,12 +504,14 @@ export const ReportForm: React.FC = () => {
   };
 
   // Loading states...
-  if (isLoading) {
+  if (isLoading || !companyInfoChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <Loader className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading questions...</p>
+          <p className="text-gray-600">
+            {!companyInfoChecked ? 'Checking company information...' : 'Loading questions...'}
+          </p>
         </div>
       </div>
     );
@@ -749,7 +780,7 @@ export const ReportForm: React.FC = () => {
                 <input
                   type="range"
                   min="1"
-                  max="10"
+                  max="100"
                   value={(getCurrentAnswer() as string) || '5'}
                   onChange={(e) => handleAnswerChange(e.target.value)}
                   disabled={isSaving || isSubmitting}

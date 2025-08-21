@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { useAuth } from '../contexts/AuthContext';
 // Remove the direct import of stripePromise
 // import { stripePromise } from '../config/stripe';
 import { reportTypes, bundlePrice, individualPrice } from '../data/reportTypes';
@@ -13,12 +14,13 @@ const PaymentForm: React.FC<{
   total: number;
   onPaymentComplete: (paymentIntentId: string) => void;
   onBack: () => void;
-}> = ({ reportIds, isBundle, total, onPaymentComplete, onBack }) => {
+  user: any; // Add user prop
+}> = ({ reportIds, isBundle, total, onPaymentComplete, onBack, user }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [paymentData, setPaymentData] = useState({
-    email: '',
-    name: '',
+    email: user?.email || '',
+    name: user?.user_metadata?.name || user?.user_metadata?.full_name || '',
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -215,6 +217,7 @@ const PaymentForm: React.FC<{
 export const PaymentFlow: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { reportIds, isBundle } = location.state || { reportIds: [], isBundle: false };
   const selectedReports = reportTypes.filter(rt => reportIds.includes(rt.id));
   const total = reportIds.length * individualPrice;
@@ -262,8 +265,8 @@ export const PaymentFlow: React.FC = () => {
           amount: total,
           currency: 'usd',
           reportIds,
-          customerEmail: 'temp@example.com', // Temporary - will be updated when form is filled
-          customerName: 'Temporary Customer'
+          customerEmail: user?.email || 'temp@example.com', // Use user email if available
+          customerName: user?.user_metadata?.name || user?.user_metadata?.full_name || 'Temporary Customer'
         };
 
         const { clientSecret } = await stripeService.createPaymentIntent(paymentIntentData);
@@ -274,7 +277,7 @@ export const PaymentFlow: React.FC = () => {
     };
 
     createInitialPaymentIntent();
-  }, [reportIds, total]);
+  }, [reportIds, total, user]);
 
   const stripeElementsOptions = {
     clientSecret,
@@ -287,6 +290,13 @@ export const PaymentFlow: React.FC = () => {
         colorDanger: '#df1b41',
         fontFamily: 'system-ui, sans-serif',
         borderRadius: '8px',
+      }
+    },
+    // Prefill customer information
+    defaultValues: {
+      billingDetails: {
+        name: user?.user_metadata?.name || user?.user_metadata?.full_name || '',
+        email: user?.email || '',
       }
     }
   };
@@ -353,6 +363,7 @@ export const PaymentFlow: React.FC = () => {
                 total={total}
                 onPaymentComplete={handlePaymentSuccess}
                 onBack={handleGoBack}
+                user={user}
               />
             </Elements>
           ) : (

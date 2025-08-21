@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { 
   ArrowLeft, 
   Download, 
@@ -36,23 +36,176 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'opportunities' | 'actions' | 'tools'>('overview');
 
+  // Dynamically find sections regardless of order
+  const findSectionByTitle = useCallback((titleKeywords: string[]) => {
+    if (!reportData) return null;
+    
+    for (const [key, value] of Object.entries(reportData)) {
+      const keyLower = key.toLowerCase();
+      if (titleKeywords.some(keyword => keyLower.includes(keyword.toLowerCase()))) {
+        return value;
+      }
+    }
+    return null;
+  }, [reportData]);
+
+  // Get all available sections for fallback
+  const getAllSections = useCallback(() => {
+    if (!reportData) return {};
+    
+    const sections: Record<string, any> = {};
+    
+    // Map sections by finding them dynamically
+    Object.entries(reportData).forEach(([key, value]) => {
+      const keyLower = key.toLowerCase();
+      
+      if (keyLower.includes('executive summary')) {
+        sections.executiveSummary = value;
+      } else if (keyLower.includes('marketing health score') || keyLower.includes('marketing overall health score') || keyLower.includes('section breakdown') || keyLower.includes('category breakdown')) {
+        if (!sections.healthScore) sections.healthScore = value;
+        if (!sections.detailedAnalysis) sections.detailedAnalysis = value;
+      } else if (keyLower.includes('detailed section analysis')) {
+        sections.detailedAnalysis = value;
+      } else if (keyLower.includes('red flags') || keyLower.includes('risk areas')) {
+        sections.redFlags = value;
+      } else if (keyLower.includes('opportunity areas') || keyLower.includes('opportunities')) {
+        sections.opportunities = value;
+      } else if (keyLower.includes('action plan') || keyLower.includes('30/90/365') || keyLower.includes('days')) {
+        sections.actionPlan = value;
+      } else if (keyLower.includes('social channel') || keyLower.includes('social media performance')) {
+        sections.socialOverview = value;
+      } else if (keyLower.includes('tool') && keyLower.includes('recommendations')) {
+        sections.toolRecommendations = value;
+      } else if (keyLower.includes('benchmark comparison')) {
+        sections.benchmarks = value;
+      } else if (keyLower.includes('call to action') || keyLower.includes('next steps')) {
+        sections.nextSteps = value;
+      }
+    });
+    
+    return sections;
+  }, [reportData]);
+
   // Memoize the parsed report data to prevent re-computation on every render
   const parsedReportData = useMemo(() => {
     if (!reportData) return null;
 
+    const sections = getAllSections();
+    
     return {
-      executiveSummary: reportData['1. 🚀 Executive Summary'] || {},
-      healthScore: reportData['2. 📊 Marketing Health Score + Section Breakdown'] || {},
-      detailedAnalysis: reportData['3. 📂 Detailed Section Analysis (7 Core Categories)'] || reportData['3. 📂 Detailed Section Analysis'] || reportData['2. 📊 Marketing Health Score + Section Breakdown'] || {},
-      redFlags: reportData['4. 🚨 Red Flags (Risk Areas)'] || reportData['3. 🚨 Red Flags (Risk Areas)'] || [],
-      opportunities: reportData['5. 💡 Top 5 Opportunity Areas'] || reportData['4. 💡 Top 5 Opportunity Areas'] || [],
-      actionPlan: reportData['6. 🧭 Action Plan: 30/90/365 Days'] || reportData['5. 🧭 Action Plan: 30/90/365 Days'] || {},
-      socialOverview: reportData['7. 📲 Social Channel Performance Overview'] || reportData['6. 📲 Social Channel Performance Overview'] || {},
-      toolRecommendations: reportData['8. 🛠 Tool & Tactic Recommendations'] || reportData['7. 🛠 Tool & Tactic Recommendations'] || [],
-      benchmarks: reportData['9. 🧩 Benchmark Comparison (Optional)'] || reportData['8. 🧩 Benchmark Comparison (Optional)'] || {},
-      nextSteps: reportData['10. 📣 Call to Action / Next Steps'] || reportData['9. 📣 Call to Action / Next Steps'] || ''
+      executiveSummary: sections.executiveSummary || {},
+      healthScore: sections.healthScore || {},
+      detailedAnalysis: sections.detailedAnalysis || sections.healthScore || {},
+      redFlags: sections.redFlags || [],
+      opportunities: sections.opportunities || [],
+      actionPlan: sections.actionPlan || {},
+      socialOverview: sections.socialOverview || {},
+      toolRecommendations: sections.toolRecommendations || [],
+      benchmarks: sections.benchmarks || {},
+      nextSteps: sections.nextSteps || ''
     };
+  }, [reportData, getAllSections]);
+
+  // Get ordered section list based on the actual JSON order
+  const getOrderedSections = useMemo(() => {
+    if (!reportData) return [];
+    
+    const orderedSections = [];
+    
+    Object.keys(reportData).forEach(key => {
+      const keyLower = key.toLowerCase();
+      
+      if (keyLower.includes('executive summary')) {
+        orderedSections.push({ key: 'executiveSummary', title: 'Executive Summary', originalKey: key });
+      } else if (keyLower.includes('marketing health score') || keyLower.includes('marketing overall health score') || keyLower.includes('section breakdown') || keyLower.includes('category breakdown')) {
+        if (!orderedSections.find(s => s.key === 'healthScore')) {
+          orderedSections.push({ key: 'healthScore', title: 'Marketing Health Score', originalKey: key });
+        }
+      } else if (keyLower.includes('detailed section analysis')) {
+        orderedSections.push({ key: 'detailedAnalysis', title: 'Detailed Analysis', originalKey: key });
+      } else if (keyLower.includes('red flags') || keyLower.includes('risk areas')) {
+        orderedSections.push({ key: 'redFlags', title: 'Risk Areas', originalKey: key });
+      } else if (keyLower.includes('opportunity areas') || keyLower.includes('opportunities')) {
+        orderedSections.push({ key: 'opportunities', title: 'Opportunities', originalKey: key });
+      } else if (keyLower.includes('action plan')) {
+        orderedSections.push({ key: 'actionPlan', title: 'Action Plan', originalKey: key });
+      } else if (keyLower.includes('social channel') || keyLower.includes('social media')) {
+        orderedSections.push({ key: 'socialOverview', title: 'Social Media', originalKey: key });
+      } else if (keyLower.includes('tool') && keyLower.includes('recommendations')) {
+        orderedSections.push({ key: 'toolRecommendations', title: 'Tools & Tactics', originalKey: key });
+      } else if (keyLower.includes('benchmark')) {
+        orderedSections.push({ key: 'benchmarks', title: 'Benchmarks', originalKey: key });
+      } else if (keyLower.includes('call to action') || keyLower.includes('next steps')) {
+        orderedSections.push({ key: 'nextSteps', title: 'Next Steps', originalKey: key });
+      }
+    });
+    
+    return orderedSections;
   }, [reportData]);
+
+  const { 
+    executiveSummary, 
+    healthScore, 
+    detailedAnalysis, 
+    redFlags, 
+    opportunities, 
+    actionPlan, 
+    socialOverview, 
+    toolRecommendations, 
+    benchmarks, 
+    nextSteps 
+  } = parsedReportData;
+
+  // Calculate overall score from the existing data
+  const overallScore = useMemo(() => {
+    // Try to get from healthScore first
+    if (healthScore && healthScore['Total Score']) {
+      return healthScore['Total Score'];
+    }
+
+    // Try to calculate from section breakdown (your data uses "Section Breakdown")
+    if (healthScore && (healthScore['Section Breakdown'] || healthScore['Category Breakdown'])) {
+      const sections = healthScore['Section Breakdown'] || healthScore['Category Breakdown'];
+      
+      if (Array.isArray(sections)) {
+        // Old format: array of categories
+        if (sections.length > 0) {
+          const totalScore = sections.reduce((sum, cat) => sum + (cat.Score || 0), 0);
+          return Math.round(totalScore / sections.length);
+        }
+      } else if (typeof sections === 'object') {
+        // New format: object with category names as keys
+        const scores = Object.values(sections).map((cat: any) => cat.Score || 0);
+        if (scores.length > 0) {
+          const totalScore = scores.reduce((sum, score) => sum + score, 0);
+          return Math.round(totalScore / scores.length);
+        }
+      }
+    }
+    
+    return 0;
+  }, [healthScore]);
+
+  const categories = healthScore['Section Breakdown'] || healthScore['Category Breakdown'] || [];
+
+  // Debug: Log section order
+  useEffect(() => {
+    if (reportData) {
+      console.log('=== REPORT DATA DEBUG ===');
+      console.log('Raw report data keys:', Object.keys(reportData));
+      console.log('Health Score section:', healthScore);
+      console.log('Total Score:', healthScore?.['Total Score']);
+      console.log('Section Breakdown:', healthScore?.['Section Breakdown']);
+      console.log('Category Breakdown:', healthScore?.['Category Breakdown']);
+      console.log('Categories variable:', categories);
+      console.log('Overall score calculation:', overallScore);
+      console.log('=== END DEBUG ===');
+    }
+    
+    if (getOrderedSections.length > 0) {
+      console.log('Sections found in order:', getOrderedSections.map(s => `${s.title} (${s.originalKey})`));
+    }
+  }, [getOrderedSections, reportData, healthScore, categories, overallScore]);
 
   // Fix: Create the utility functions as regular functions, not useMemo
   const getStatusColor = (status: string) => {
@@ -108,22 +261,6 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
       </div>
     );
   }
-
-  const { 
-    executiveSummary, 
-    healthScore, 
-    detailedAnalysis, 
-    redFlags, 
-    opportunities, 
-    actionPlan, 
-    socialOverview, 
-    toolRecommendations, 
-    benchmarks, 
-    nextSteps 
-  } = parsedReportData;
-
-  const overallScore = healthScore['Total Score'] || 0;
-  const categories = healthScore['Category Breakdown'] || [];
 
   // Memoize the tab navigation to prevent recreation
   const tabNavigation = useMemo(() => [
@@ -321,9 +458,27 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                   </p>
                 </div>
 
+                {/* Debug section - show when no categories found */}
+                {(!categories || (Array.isArray(categories) && categories.length === 0) || 
+                  (typeof categories === 'object' && Object.keys(categories).length === 0)) && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+                    <h3 className="text-lg font-bold text-yellow-900 mb-4">Debug Information</h3>
+                    <div className="space-y-2 text-sm">
+                      <p><strong>Available sections:</strong> {reportData ? Object.keys(reportData).join(', ') : 'None'}</p>
+                      <p><strong>Health Score section found:</strong> {healthScore ? 'Yes' : 'No'}</p>
+                      <p><strong>Total Score:</strong> {healthScore?.['Total Score'] || 'Not found'}</p>
+                      <p><strong>Section Breakdown:</strong> {healthScore?.['Section Breakdown'] ? 'Found' : 'Not found'}</p>
+                      <p><strong>Category Breakdown:</strong> {healthScore?.['Category Breakdown'] ? 'Found' : 'Not found'}</p>
+                      <p><strong>Categories data type:</strong> {Array.isArray(categories) ? 'Array' : typeof categories}</p>
+                      <p><strong>Categories keys:</strong> {categories && typeof categories === 'object' ? Object.keys(categories).join(', ') : 'None'}</p>
+                      <p><strong>Detailed Analysis keys:</strong> {detailedAnalysis ? Object.keys(detailedAnalysis).join(', ') : 'None'}</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-6">
                   {/* Handle both array format (old) and object format (new) */}
-                  {Array.isArray(categories) ? (
+                  {Array.isArray(categories) && categories.length > 0 ? (
                     // Old format: array of category objects
                     categories.map((category: any, idx: number) => (
                       <div key={idx} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
@@ -354,7 +509,7 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                         {detailedAnalysis[category.Category] && (
                           <div className="mt-4 p-4 bg-gray-50 rounded-lg">
                             <p className="text-sm text-gray-600 mb-4">
-                              {detailedAnalysis[category.Category].Commentary}
+                              {detailedAnalysis[category.Category]['Detailed Commentary'] || detailedAnalysis[category.Category].Commentary}
                             </p>
                             
                             {detailedAnalysis[category.Category]['Key Observations'] && (
@@ -378,7 +533,7 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                                   Next-Step Suggestions:
                                 </h5>
                                 <ul className="text-sm text-gray-600 space-y-1">
-                                  {detailedAnalysis[category.Category]['Next-step Suggestions'].map((suggestion: string, suggIdx: number) => (
+                                  {detailedAnalysis[category.Category]['Next-Step Suggestions'].map((suggestion: string, suggIdx: number) => (
                                     <li key={suggIdx} className="flex items-start">
                                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 mr-2 flex-shrink-0" />
                                       {suggestion}
@@ -391,14 +546,13 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                         )}
                       </div>
                     ))
-                  ) : (
-                    // New format: object with category names as keys and object values
-                    Object.entries(healthScore['Category Breakdown'] || {}).map(([categoryName, categoryInfo], idx) => {
-                      // Handle the new object format: { Score: 60, Status: "Yellow", Assessment: "description" }
+                  ) : categories && typeof categories === 'object' && Object.keys(categories).length > 0 ? (
+                    // New format: object with category names as keys
+                    Object.entries(categories).map(([categoryName, categoryInfo], idx) => {
                       const categoryData = categoryInfo as any;
                       const score = categoryData.Score || 0;
                       const status = categoryData.Status || 'Unknown';
-                      const description = categoryData.Assessment || '';
+                      const description = categoryData.Assessment || categoryData['Detailed Commentary'] || '';
 
                       return (
                         <div key={idx} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
@@ -425,35 +579,29 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                           
                           <p className="text-gray-700">{description}</p>
 
-                          {/* Detailed analysis */}
-                          {detailedAnalysis[categoryName] && (
+                          {/* Additional analysis from detailed analysis section */}
+                          {categoryData['Key Observations'] && (
                             <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                              <p className="text-sm text-gray-600 mb-4">
-                                {detailedAnalysis[categoryName].Commentary}
-                              </p>
-                              
-                              {detailedAnalysis[categoryName]['Key Observations'] && (
-                                <div className="mb-4">
-                                  <h5 className="font-semibold text-gray-900 mb-2">Key Observations:</h5>
-                                  <ul className="text-sm text-gray-600 space-y-1">
-                                    {detailedAnalysis[categoryName]['Key Observations'].map((obs: string, obsIdx: number) => (
-                                      <li key={obsIdx} className="flex items-start">
-                                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 mr-2 flex-shrink-0" />
-                                        {obs}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
+                              <div className="mb-4">
+                                <h5 className="font-semibold text-gray-900 mb-2">Key Observations:</h5>
+                                <ul className="text-sm text-gray-600 space-y-1">
+                                  {categoryData['Key Observations'].map((obs: string, obsIdx: number) => (
+                                    <li key={obsIdx} className="flex items-start">
+                                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 mr-2 flex-shrink-0" />
+                                      {obs}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
 
-                              {detailedAnalysis[categoryName]['Next-Step Suggestions'] && (
+                              {categoryData['Next-Step Suggestions'] && (
                                 <div>
                                   <h5 className="font-semibold text-gray-900 mb-2 flex items-center">
                                     <Lightbulb className="w-4 h-4 mr-1 text-yellow-500" />
                                     Next-Step Suggestions:
                                   </h5>
                                   <ul className="text-sm text-gray-600 space-y-1">
-                                    {detailedAnalysis[categoryName]['Next-Step Suggestions'].map((suggestion: string, suggIdx: number) => (
+                                    {categoryData['Next-Step Suggestions'].map((suggestion: string, suggIdx: number) => (
                                       <li key={suggIdx} className="flex items-start">
                                         <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 mr-2 flex-shrink-0" />
                                         {suggestion}
@@ -467,6 +615,86 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                         </div>
                       );
                     })
+                  ) : detailedAnalysis && Object.keys(detailedAnalysis).length > 0 ? (
+                    // Fallback: Use detailed analysis directly if categories are empty
+                    Object.entries(detailedAnalysis).map(([categoryName, categoryInfo], idx) => {
+                      const categoryData = categoryInfo as any;
+                      const score = categoryData.Score || 0;
+                      const status = categoryData.Status || 'Unknown';
+                      const description = categoryData['Detailed Commentary'] || categoryData.Assessment || '';
+
+                      return (
+                        <div key={idx} className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-gray-900">{categoryName}</h3>
+                            <div className="flex items-center space-x-3">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(status)}`}>
+                                {status}
+                              </span>
+                              <div className="text-2xl font-bold text-gray-900">{score}%</div>
+                            </div>
+                          </div>
+                          
+                          <div className="w-full bg-gray-200 rounded-full h-3 mb-3">
+                            <div
+                              className={`h-3 rounded-full transition-all duration-500 ${
+                                status?.toLowerCase() === 'green' ? 'bg-green-500' :
+                                status?.toLowerCase() === 'yellow' ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                          
+                          <p className="text-gray-700">{description}</p>
+
+                          {/* Additional analysis from detailed analysis section */}
+                          {categoryData['Key Observations'] && (
+                            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                              <div className="mb-4">
+                                <h5 className="font-semibold text-gray-900 mb-2">Key Observations:</h5>
+                                <ul className="text-sm text-gray-600 space-y-1">
+                                  {categoryData['Key Observations'].map((obs: string, obsIdx: number) => (
+                                    <li key={obsIdx} className="flex items-start">
+                                      <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-2 mr-2 flex-shrink-0" />
+                                      {obs}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+
+                              {categoryData['Next-Step Suggestions'] && (
+                                <div>
+                                  <h5 className="font-semibold text-gray-900 mb-2 flex items-center">
+                                    <Lightbulb className="w-4 h-4 mr-1 text-yellow-500" />
+                                    Next-Step Suggestions:
+                                  </h5>
+                                  <ul className="text-sm text-gray-600 space-y-1">
+                                    {categoryData['Next-Step Suggestions'].map((suggestion: string, suggIdx: number) => (
+                                      <li key={suggIdx} className="flex items-start">
+                                        <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 mr-2 flex-shrink-0" />
+                                        {suggestion}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    // Final fallback: No categories found
+                    <div className="text-center py-12">
+                      <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <BarChart3 className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Category Data Found</h3>
+                      <p className="text-gray-500">
+                        The report data doesn't contain recognizable category breakdown information.
+                      </p>
+                    </div>
                   )}
                 </div>
               </div>
@@ -498,13 +726,18 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                       </div>
                       
                       <p className="text-gray-700 leading-relaxed mb-4">
-                        {opp['Opportunity Description'] || opp.Description}
+                        {opp.Description || opp['Opportunity Description']}
                       </p>
                       
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <div className="text-sm font-semibold text-green-800 mb-1">Estimated Impact:</div>
-                        <div className="text-sm text-green-700">{opp['Estimated Lift'] || 'See description above for impact details'}</div>
-                      </div>
+                      {/* Only show estimated impact section if there's specific impact data */}
+                      {(opp['Estimated Lift'] || opp['Estimated Impact'] || opp['Impact Details']) && (
+                        <div className="bg-green-50 p-4 rounded-lg">
+                          <div className="text-sm font-semibold text-green-800 mb-1">Estimated Impact:</div>
+                          <div className="text-sm text-green-700">
+                            {opp['Estimated Lift'] || opp['Estimated Impact'] || opp['Impact Details']}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -652,7 +885,7 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                           {!priorities && !helpContent && (
                             <div className="prose prose-invert max-w-none">
                               <div className="text-blue-100 leading-relaxed">
-                                {content.replace(/🔧|👉|💬|🧠|\[.*?\]/g, '').trim()}
+                                {content.replace(/🔧|👉|💬|🧠 |\[.*?\]/g, '').trim()}
                               </div>
                             </div>
                           )}
@@ -743,7 +976,7 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                 )}
 
                 {/* Social Performance - Handle new Platform Analysis format */}
-                {(socialOverview.Note || socialOverview.Overview || socialOverview.Platforms || socialOverview['Platform Analysis']) && (
+                {(socialOverview && Object.keys(socialOverview).length > 0) && (
                   <div>
                     <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center">
                       <Users className="w-8 h-8 mr-3 text-purple-500" />
@@ -758,54 +991,60 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                       </div>
                     )}
                     
-                    {/* Handle platform-specific data in array format */}
-                    {Array.isArray(socialOverview.Platforms) && (
-                      <div className="space-y-4">
-                        {socialOverview.Platforms.map((platform: any, idx: number) => (
-                          <div key={idx} className="bg-white border border-gray-200 rounded-xl p-6">
-                            <div className="flex items-center justify-between mb-4">
-                              <h4 className="font-semibold text-gray-900">{platform.Platform}</h4>
-                              <div className="flex items-center space-x-3">
-                                <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(platform.Status)}`}>
-                                  {platform.Status}
-                                </span>
-                                <div className="text-lg font-bold text-gray-900">{platform.Score}%</div>
-                              </div>
+                    {/* Handle individual platform data (YouTube, LinkedIn, etc.) */}
+                    {Object.entries(socialOverview).map(([platformKey, platformData]) => {
+                      // Skip non-platform entries
+                      if (!platformData || typeof platformData !== 'object' || !platformData.Score) {
+                        return null;
+                      }
+
+                      const platform = platformData as any;
+                      return (
+                        <div key={platformKey} className="bg-white border border-gray-200 rounded-xl p-6 mb-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="font-semibold text-gray-900">{platformKey}</h4>
+                            <div className="flex items-center space-x-3">
+                              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(platform.Status)}`}>
+                                {platform.Status}
+                              </span>
+                              <div className="text-lg font-bold text-gray-900">{platform.Score}%</div>
                             </div>
-                            
-                            <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                              <div
-                                className={`h-2 rounded-full transition-all duration-500 ${
-                                  platform.Status?.toLowerCase() === 'green' ? 'bg-green-500' :
-                                  platform.Status?.toLowerCase() === 'yellow' ? 'bg-yellow-500' :
-                                  'bg-red-500'
-                                }`}
-                                style={{ width: `${platform.Score}%` }}
-                              />
-                            </div>
-                            
-                            <p className="text-gray-700 text-sm leading-relaxed mb-4">{platform.Analysis}</p>
-                            
-                            {platform.Recommendations && Array.isArray(platform.Recommendations) && (
-                              <div>
-                                <h5 className="font-semibold text-gray-900 mb-2">Recommendations:</h5>
-                                <ul className="space-y-2">
-                                  {platform.Recommendations.map((rec: string, recIdx: number) => (
-                                    <li key={recIdx} className="flex items-start">
-                                      <Lightbulb className="w-4 h-4 text-yellow-500 mt-0.5 mr-3 flex-shrink-0" />
-                                      <span className="text-gray-700 text-sm">{rec}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          
+                          <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                            <div
+                              className={`h-2 rounded-full transition-all duration-500 ${
+                                platform.Status?.toLowerCase() === 'green' ? 'bg-green-500' :
+                                platform.Status?.toLowerCase() === 'yellow' ? 'bg-yellow-500' :
+                                'bg-red-500'
+                              }`}
+                              style={{ width: `${platform.Score}%` }}
+                            />
+                          </div>
+                          
+                          <p className="text-gray-700 text-sm leading-relaxed mb-4">{platform.Analysis}</p>
+                          
+                          {platform.Recommendations && Array.isArray(platform.Recommendations) && (
+                            <div>
+                              <h5 className="font-semibold text-gray-900 mb-2">Recommendations:</h5>
+                              <ul className="space-y-2">
+                                {platform.Recommendations.map((rec: string, recIdx: number) => (
+                                  <li key={recIdx} className="flex items-start">
+                                    <Lightbulb className="w-4 h-4 text-yellow-500 mt-0.5 mr-3 flex-shrink-0" />
+                                    <span className="text-gray-700 text-sm">{rec}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     
-                    {/* Handle old format: simple overview */}
-                    {(socialOverview.Note || socialOverview.Overview) && !socialOverview['Platform Analysis'] && (
+                    {/* Fallback: Handle old format or simple overview */}
+                    {(socialOverview.Note || socialOverview.Overview) && !Object.keys(socialOverview).some(key => 
+                      key !== 'Note' && key !== 'Overview' && key !== 'General Analysis' && key !== '2 Quick Recommendations'
+                    ) && (
                       <div className="bg-white border border-gray-200 rounded-xl p-6">
                         {socialOverview.Note && (
                           <div className="mb-4">
