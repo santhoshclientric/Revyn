@@ -34,7 +34,7 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
   onDownload,
   onStartChat 
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'opportunities' | 'actions' | 'tools'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'categories' | 'website' | 'opportunities' | 'actions' | 'tools'>('overview');
 
   // Dynamically find sections regardless of order
   const findSectionByTitle = useCallback((titleKeywords: string[]) => {
@@ -266,6 +266,7 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
   const tabNavigation = useMemo(() => [
     { id: 'overview', label: 'Executive Summary', icon: Brain },
     { id: 'categories', label: 'Score Breakdown', icon: BarChart3 },
+    { id: 'website', label: 'Website Analysis', icon: Eye },
     { id: 'opportunities', label: 'Opportunities', icon: Lightbulb },
     { id: 'actions', label: 'Action Plan', icon: Calendar },
     { id: 'tools', label: 'Tools & Benchmarks', icon: Settings }
@@ -697,6 +698,231 @@ export const AIReportViewer: React.FC<AIReportViewerProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'website' && (
+              <div className="space-y-8">
+                <div className="text-center mb-8">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center justify-center">
+                    <Eye className="w-8 h-8 mr-3 text-blue-500" />
+                    Detailed Website Analysis
+                  </h2>
+                  <p className="text-gray-600">
+                    Comprehensive evaluation of your website's performance and optimization opportunities
+                  </p>
+                </div>
+
+                {/* Check if website analysis data exists */}
+                {(() => {
+                  // Try to find website analysis data in reportData
+                  const websiteAnalysis = reportData?.website_analysis;
+                  
+                  if (!websiteAnalysis) {
+                    return (
+                      <div className="text-center py-12">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Eye className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No Website Analysis Available</h3>
+                        <p className="text-gray-500">
+                          Website analysis data is not available for this report.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  const { score, analysis, platform, recommendations, priority_roadmap } = websiteAnalysis;
+
+                  return (
+                    <div className="space-y-8">
+                      {/* Overall Website Score */}
+                      {score && (
+                        <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-8 border border-blue-200">
+                          <div className="text-center">
+                            <div className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
+                              {score.value}
+                            </div>
+                            <div className="text-lg font-semibold text-gray-700 mb-2">Website Score</div>
+                            <div className={`inline-block px-4 py-2 rounded-full text-sm font-medium border ${
+                              score.value >= 80 ? getStatusColor('green') :
+                              score.value >= 60 ? getStatusColor('yellow') :
+                              getStatusColor('red')
+                            }`}>
+                              {score.status}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Analysis Categories */}
+                      {analysis && (
+                        <div className="space-y-6">
+                          <h3 className="text-xl font-bold text-gray-900 mb-6">Detailed Analysis</h3>
+                          
+                          {/* Content Quality */}
+                          {analysis.content_quality && (
+                            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <div className="w-4 h-4 bg-blue-500 rounded-full mr-3" />
+                                Content Quality
+                              </h4>
+                              <ul className="space-y-3">
+                                {analysis.content_quality.map((item: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0" />
+                                    <span className="text-gray-700 text-sm leading-relaxed">{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* SEO Discoverability */}
+                          {analysis.seo_discoverability && (
+                            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <div className="w-4 h-4 bg-green-500 rounded-full mr-3" />
+                                SEO Discoverability
+                              </h4>
+                              <ul className="space-y-3">
+                                {analysis.seo_discoverability.map((item: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <div className="w-2 h-2 bg-green-400 rounded-full mt-2 mr-3 flex-shrink-0" />
+                                    <span className="text-gray-700 text-sm leading-relaxed">{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Branding Consistency */}
+                          {analysis.branding_consistency && (
+                            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <div className="w-4 h-4 bg-purple-500 rounded-full mr-3" />
+                                Branding Consistency
+                              </h4>
+                              <ul className="space-y-3">
+                                {analysis.branding_consistency.map((item: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <div className="w-2 h-2 bg-purple-400 rounded-full mt-2 mr-3 flex-shrink-0" />
+                                    <span className="text-gray-700 text-sm leading-relaxed">{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Conversion Readiness */}
+                          {analysis.conversion_readiness && (
+                            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <div className="w-4 h-4 bg-orange-500 rounded-full mr-3" />
+                                Conversion Readiness
+                              </h4>
+                              <ul className="space-y-3">
+                                {analysis.conversion_readiness.map((item: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <div className="w-2 h-2 bg-orange-400 rounded-full mt-2 mr-3 flex-shrink-0" />
+                                    <span className="text-gray-700 text-sm leading-relaxed">{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {/* Navigation Usability */}
+                          {analysis.navigation_usability && (
+                            <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                              <h4 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+                                <div className="w-4 h-4 bg-teal-500 rounded-full mr-3" />
+                                Navigation & Usability
+                              </h4>
+                              <ul className="space-y-3">
+                                {analysis.navigation_usability.map((item: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <div className="w-2 h-2 bg-teal-400 rounded-full mt-2 mr-3 flex-shrink-0" />
+                                    <span className="text-gray-700 text-sm leading-relaxed">{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Recommendations */}
+                      {recommendations && recommendations.length > 0 && (
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                            <Lightbulb className="w-6 h-6 mr-2 text-yellow-500" />
+                            Priority Recommendations
+                          </h3>
+                          <div className="space-y-4">
+                            {recommendations.map((recommendation: string, idx: number) => (
+                              <div key={idx} className="bg-yellow-50 border-l-4 border-yellow-400 rounded-lg p-6">
+                                <div className="flex items-start">
+                                  <div className="bg-yellow-400 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-4 mt-0.5 flex-shrink-0">
+                                    {idx + 1}
+                                  </div>
+                                  <span className="text-yellow-800 leading-relaxed">{recommendation}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Priority Roadmap */}
+                      {priority_roadmap && (
+                        <div>
+                          <h3 className="text-xl font-bold text-gray-900 mb-6 flex items-center">
+                            <Calendar className="w-6 h-6 mr-2 text-blue-500" />
+                            Implementation Roadmap
+                          </h3>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* 30 Days */}
+                            {priority_roadmap['30_days'] && (
+                              <div className="bg-green-50 rounded-xl p-6 border border-green-200">
+                                <h4 className="text-lg font-bold text-green-900 mb-4 flex items-center">
+                                  <Zap className="w-5 h-5 mr-2" />
+                                  Next 30 Days (Quick Wins)
+                                </h4>
+                                <ul className="space-y-3">
+                                  {priority_roadmap['30_days'].map((action: string, idx: number) => (
+                                    <li key={idx} className="flex items-start">
+                                      <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 mr-3 flex-shrink-0" />
+                                      <span className="text-green-800 text-sm">{action}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* 60 Days */}
+                            {priority_roadmap['60_days'] && (
+                              <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
+                                <h4 className="text-lg font-bold text-blue-900 mb-4 flex items-center">
+                                  <Target className="w-5 h-5 mr-2" />
+                                  Next 60 Days (Foundation Building)
+                                </h4>
+                                <ul className="space-y-3">
+                                  {priority_roadmap['60_days'].map((action: string, idx: number) => (
+                                    <li key={idx} className="flex items-start">
+                                      <Target className="w-4 h-4 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                                      <span className="text-blue-800 text-sm">{action}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 

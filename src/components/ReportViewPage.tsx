@@ -222,7 +222,11 @@ export const ReportViewPage: React.FC = () => {
   // Render the report using AIReportViewer
   return (
     <AIReportViewer
-      reportData={aiResult?.result_data}
+    reportData={{
+        ...aiResult?.result_data,
+        website_analysis: aiResult?.website_analysis
+      }}
+      
       companyName={purchase.company_name || 'Your Company'}
       onBack={handleBack}
       onDownload={handleDownload}
