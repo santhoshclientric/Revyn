@@ -1,10 +1,11 @@
-// Updated ReportForm.tsx with API call integration
+// Updated ReportForm.tsx with proper Checkboxes + % input handling
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../config/supabase';
 import { CheckCircle, ArrowRight, ArrowLeft, Loader, Save, Zap } from 'lucide-react';
+import CheckboxPercentageInput from './CheckboxPercentageInput';
 
 interface Question {
   id: number;
@@ -21,9 +22,6 @@ interface Answer {
   answer_text?: string;
   answer_options?: string[];
 }
-
-// API Service for triggering AI analysis
-// Updated ReportForm.tsx - Replace the AIAnalysisService class with this:
 
 // AI Service that calls your server endpoint
 class AIAnalysisService {
@@ -61,68 +59,6 @@ class AIAnalysisService {
   }
 }
 
-// Usage in your handleSubmit function remains the same:
-const handleSubmit = async () => {
-  if (!user || !currentPurchaseId) {
-    setError('Missing user or purchase information. Please try again.');
-    return;
-  }
-
-  try {
-    setIsSubmitting(true);
-    setError('');
-
-    // Save the final answer
-    if (tempAnswer) {
-      await saveAnswerToDatabase(currentQuestion.id, tempAnswer);
-      setAnswers(prev => ({ ...prev, [currentQuestion.id]: tempAnswer }));
-    }
-
-    // Update purchase status to form_completed
-    const { error: updateError } = await supabase
-      .from('purchases')
-      .update({ report_status: 'form_completed' })
-      .eq('user_id', user.id)
-      .eq('id', currentPurchaseId);
-
-    if (updateError) {
-      console.error('Error updating purchase status:', updateError);
-      throw new Error('Failed to update completion status');
-    }
-
-    console.log('Form completed successfully, triggering AI analysis...');
-
-    // Trigger AI analysis API call via your server
-    try {
-      await AIAnalysisService.triggerAIAnalysis(currentPurchaseId);
-      console.log('AI analysis triggered successfully via server');
-    } catch (apiError) {
-      console.error('AI analysis API call failed:', apiError);
-      // Don't stop the flow, just log the error
-      // The user can still see their form is completed
-    }
-
-    // Navigate to a success/processing page
-    navigate('/processing', {
-      state: {
-        reportId,
-        reportIds,
-        paymentId: paymentId || paymentIntentFromUrl,
-        purchaseId: currentPurchaseId,
-        companyInfo,
-        source,
-        completedQuestions: questions.length,
-        aiAnalysisTriggered: true
-      }
-    });
-
-  } catch (error) {
-    console.error('Error submitting form:', error);
-    setError('Failed to submit form. Please try again.');
-    setIsSubmitting(false);
-  }
-};
-
 export const ReportForm: React.FC = () => {
   console.log('=== REPORT FORM COMPONENT MOUNTED ===');
   
@@ -132,27 +68,11 @@ export const ReportForm: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   
-  console.log('Initial props:', {
-    reportId,
-    locationState: location.state,
-    searchParams: Object.fromEntries(searchParams.entries()),
-    user: user ? { id: user.id, email: user.email } : null
-  });
-  
   // Get data from either location.state or URL params
   const { reportIds, paymentId, purchaseId, source } = location.state || {};
   const purchaseIdFromUrl = searchParams.get('purchase_id');
   const paymentIntentFromUrl = searchParams.get('payment_intent');
   const currentPurchaseId = purchaseId || purchaseIdFromUrl;
-  
-  console.log('Purchase ID resolution:', {
-    purchaseId,
-    purchaseIdFromUrl,
-    currentPurchaseId,
-    paymentId,
-    paymentIntentFromUrl,
-    source
-  });
   
   // State management
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -171,7 +91,6 @@ export const ReportForm: React.FC = () => {
   useEffect(() => {
     const loadCompanyInfo = async () => {
       if (user) {
-        // If continuing an existing purchase, load company info from purchases table
         if (currentPurchaseId && source === 'dashboard') {
           try {
             const { data: purchase, error } = await supabase
@@ -186,7 +105,6 @@ export const ReportForm: React.FC = () => {
                 companyName: purchase.company_name || 'Demo Company',
                 email: purchase.company_email || user.email || ''
               });
-              console.log('Loaded company info from purchases:', purchase);
             } else {
               setCompanyInfo({
                 companyName: 'Demo Company',
@@ -201,7 +119,6 @@ export const ReportForm: React.FC = () => {
             });
           }
 
-          console.log('Continuing existing form, skipping company info');
           setShowCompanyForm(false);
         } else {
           setCompanyInfo(prev => ({
@@ -219,15 +136,9 @@ export const ReportForm: React.FC = () => {
   useEffect(() => {
     const loadQuestions = async () => {
       if (hasLoadedInitialData && questions.length > 0 && !document.hidden) {
-        console.log('Skipping reload - data already loaded');
         return;
       }
 
-      console.log('=== LOADING QUESTIONS ===');
-      console.log('User:', user ? { id: user.id, email: user.email } : 'No user');
-      console.log('Current purchase ID:', currentPurchaseId);
-      console.log('Source:', source);
-      
       try {
         setIsLoading(true);
         const { data: questionsData, error } = await supabase
@@ -235,10 +146,7 @@ export const ReportForm: React.FC = () => {
           .select('*')
           .order('question_number');
 
-        console.log('Questions loaded:', { count: questionsData?.length, error });
-
         if (error) {
-          console.error('Error loading questions:', error);
           setError('Failed to load questions. Please try again.');
           return;
         }
@@ -247,19 +155,11 @@ export const ReportForm: React.FC = () => {
         
         // Load existing answers if user is continuing a form
         if (user && currentPurchaseId) {
-          console.log('Loading existing answers for user:', user.id, 'purchase:', currentPurchaseId);
-          
           const { data: existingAnswers, error: answersError } = await supabase
             .from('answers')
             .select('*')
             .eq('user_id', user.id)
             .eq('purchase_id', currentPurchaseId);
-
-          console.log('Existing answers loaded:', { 
-            count: existingAnswers?.length, 
-            error: answersError,
-            answers: existingAnswers 
-          });
 
           if (!answersError && existingAnswers && existingAnswers.length > 0) {
             const answersMap: Record<number, Answer> = {};
@@ -270,7 +170,6 @@ export const ReportForm: React.FC = () => {
                 answer_options: answer.answer_options
               };
             });
-            console.log('Setting existing answers:', answersMap);
             setAnswers(answersMap);
 
             // Find the last answered question to resume from there
@@ -289,37 +188,17 @@ export const ReportForm: React.FC = () => {
                 }
               }
               
-              console.log(`Resuming from question index ${resumeIndex} (question ID: ${orderedQuestionIds[resumeIndex]})`);
               setCurrentQuestionIndex(resumeIndex);
             }
 
-            console.log('User has existing answers, skipping company form');
             setShowCompanyForm(false);
-
-            if (existingAnswers.length < (questionsData?.length || 80)) {
-              const { error: statusError } = await supabase
-                .from('purchases')
-                .update({ report_status: 'form_started' })
-                .eq('id', currentPurchaseId)
-                .eq('user_id', user.id);
-
-              if (statusError) {
-                console.error('Error updating status to form_started:', statusError);
-              } else {
-                console.log('Updated status to form_started');
-              }
-            }
           } else if (source === 'dashboard' && currentPurchaseId) {
-            console.log('User continuing from dashboard with no answers, skipping company form');
             setShowCompanyForm(false);
           }
-        } else {
-          console.log('Not loading existing answers - missing user or purchaseId');
         }
         
         setHasLoadedInitialData(true);
       } catch (error) {
-        console.error('Error in loadQuestions:', error);
         setError('Failed to load questions. Please try again.');
       } finally {
         setIsLoading(false);
@@ -338,10 +217,9 @@ export const ReportForm: React.FC = () => {
   const handleCompanyInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (companyInfo.companyName && companyInfo.email) {
-      // Store company name in purchases table
       if (user && currentPurchaseId && companyInfo.companyName !== 'Demo Company') {
         try {
-          const { error: updateError } = await supabase
+          await supabase
             .from('purchases')
             .update({ 
               company_name: companyInfo.companyName,
@@ -349,12 +227,6 @@ export const ReportForm: React.FC = () => {
             })
             .eq('id', currentPurchaseId)
             .eq('user_id', user.id);
-
-          if (updateError) {
-            console.error('Error updating company info in purchases:', updateError);
-          } else {
-            console.log('Company info saved to purchases table:', companyInfo.companyName);
-          }
         } catch (error) {
           console.error('Error saving company info:', error);
         }
@@ -366,7 +238,6 @@ export const ReportForm: React.FC = () => {
 
   const saveAnswerToDatabase = async (questionId: number, answerData: Answer) => {
     if (!user || !currentPurchaseId) {
-      console.log('Cannot save answer - missing user or purchaseId');
       return;
     }
 
@@ -387,14 +258,8 @@ export const ReportForm: React.FC = () => {
         });
 
       if (error) {
-        console.error('Supabase error saving answer:', error);
         throw new Error('Database error: ' + error.message);
       }
-
-      console.log(`Answer saved to database for question ${questionId}:`, {
-        answer_text: answerData.answer_text,
-        answer_options: answerData.answer_options
-      });
       
     } catch (error) {
       console.error('Error in saveAnswerToDatabase:', error);
@@ -404,16 +269,25 @@ export const ReportForm: React.FC = () => {
     }
   };
 
-  const handleAnswerChange = (answer: string | string[]) => {
+  // Updated answer change handler to handle percentage data
+  const handleAnswerChange = (answer: string | string[] | Record<string, number>) => {
     if (!currentQuestion) return;
 
-    const answerData: Answer = {
-      question_id: currentQuestion.id,
-      ...(Array.isArray(answer) 
-        ? { answer_options: answer }
-        : { answer_text: answer }
-      )
+    let answerData: Answer = {
+      question_id: currentQuestion.id
     };
+
+    // Handle different answer types
+    if (typeof answer === 'object' && !Array.isArray(answer)) {
+      // Percentage data - store as JSON string in answer_text
+      answerData.answer_text = JSON.stringify(answer);
+    } else if (Array.isArray(answer)) {
+      // Array data
+      answerData.answer_options = answer;
+    } else {
+      // String data
+      answerData.answer_text = answer;
+    }
 
     setTempAnswer(answerData);
   };
@@ -436,21 +310,14 @@ export const ReportForm: React.FC = () => {
 
         const totalAnswered = Object.keys(answers).length + 1;
         if (totalAnswered === 1) {
-          const { error: statusError } = await supabase
+          await supabase
             .from('purchases')
             .update({ report_status: 'form_started' })
             .eq('id', currentPurchaseId)
             .eq('user_id', user.id);
-
-          if (statusError) {
-            console.error('Error updating status to form_started:', statusError);
-          } else {
-            console.log('Updated status to form_started');
-          }
         }
         
       } catch (error) {
-        console.error('Failed to save answer:', error);
         setError('Failed to save answer. Please try again.');
         return;
       }
@@ -468,7 +335,6 @@ export const ReportForm: React.FC = () => {
         setAnswers(prev => ({ ...prev, [currentQuestion.id]: tempAnswer }));
         setTempAnswer(null);
       } catch (error) {
-        console.error('Failed to save answer:', error);
         setError('Failed to save answer. Please try again.');
         return;
       }
@@ -503,23 +369,17 @@ export const ReportForm: React.FC = () => {
         .eq('id', currentPurchaseId);
 
       if (updateError) {
-        console.error('Error updating purchase status:', updateError);
         throw new Error('Failed to update completion status');
       }
-
-      console.log('Form completed successfully, triggering AI analysis...');
 
       // Trigger AI analysis API call
       try {
         await AIAnalysisService.triggerAIAnalysis(currentPurchaseId);
-        console.log('AI analysis triggered successfully');
       } catch (apiError) {
         console.error('AI analysis API call failed:', apiError);
-        // Don't stop the flow, just log the error
-        // The user can still see their form is completed
       }
 
-      // Navigate to a success/processing page
+      // Navigate to processing page
       navigate('/processing', {
         state: {
           reportId,
@@ -534,7 +394,6 @@ export const ReportForm: React.FC = () => {
       });
 
     } catch (error) {
-      console.error('Error submitting form:', error);
       setError('Failed to submit form. Please try again.');
       setIsSubmitting(false);
     }
@@ -554,38 +413,56 @@ export const ReportForm: React.FC = () => {
     if (!currentQuestion) return null;
     
     if (tempAnswer && tempAnswer.question_id === currentQuestion.id) {
+      // For percentage questions, parse JSON from answer_text
+      if (currentQuestion.format_type === 'Checkboxes + % input' && tempAnswer.answer_text) {
+        try {
+          return JSON.parse(tempAnswer.answer_text);
+        } catch {
+          return {};
+        }
+      }
       return tempAnswer.answer_text || tempAnswer.answer_options || null;
     }
     
     const answer = answers[currentQuestion.id];
-    return answer?.answer_text || answer?.answer_options || null;
+    if (!answer) return null;
+    
+    // For percentage questions, parse JSON from answer_text
+    if (currentQuestion.format_type === 'Checkboxes + % input' && answer.answer_text) {
+      try {
+        return JSON.parse(answer.answer_text);
+      } catch {
+        return {};
+      }
+    }
+    
+    return answer.answer_text || answer.answer_options || null;
   };
 
   const isCurrentQuestionAnswered = () => {
     const answer = getCurrentAnswer();
+    
+    // Handle percentage answers
+    if (currentQuestion?.format_type === 'Checkboxes + % input') {
+      if (typeof answer === 'object' && !Array.isArray(answer) && answer !== null) {
+        const percentageAnswer = answer as Record<string, number>;
+        const total = Object.values(percentageAnswer).reduce((sum, val) => sum + val, 0);
+        const hasSelections = Object.keys(percentageAnswer).length > 0;
+        return hasSelections && Math.abs(total - 100) < 0.01;
+      }
+      return false;
+    }
+    
+    // Handle array answers
     if (Array.isArray(answer)) {
       return answer.length > 0;
     }
+    
+    // Handle string answers
     return answer && answer.toString().trim().length > 0;
   };
 
-  // Handle visibility change to prevent reload on tab switch
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log('Tab hidden - preserving state');
-      } else {
-        console.log('Tab visible - maintaining current state');
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
-
+  // Loading states...
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -664,16 +541,13 @@ export const ReportForm: React.FC = () => {
                 required
                 placeholder="your@company.com"
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Prepopulated with your account email. You can change it if needed.
-              </p>
             </div>
             
             <button
               type="submit"
               className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 px-6 rounded-xl font-semibold hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
             >
-              Start Audit
+              Start Audit ({questions.length} Questions)
             </button>
             
             <button
@@ -820,6 +694,16 @@ export const ReportForm: React.FC = () => {
               </div>
             )}
 
+            {/* Checkboxes + % input - NEW QUESTION TYPE */}
+            {currentQuestion?.format_type === 'Checkboxes + % input' && currentQuestion.response_options && (
+              <CheckboxPercentageInput
+                options={currentQuestion.response_options}
+                value={getCurrentAnswer() as Record<string, number> || {}}
+                onChange={handleAnswerChange}
+                disabled={isSaving || isSubmitting}
+              />
+            )}
+
             {/* Text Input */}
             {(currentQuestion?.format_type === 'Short Text' || 
               currentQuestion?.format_type === 'Long Form' || 
@@ -870,7 +754,7 @@ export const ReportForm: React.FC = () => {
             )}
 
             {/* Fallback for unimplemented types */}
-            {!['Multiple Choice', 'Yes/No', 'Multi-select', 'Checkboxes', 'Short Text', 'Long Form', 'Multi-line Text', 'Slider'].includes(currentQuestion?.format_type || '') && (
+            {!['Multiple Choice', 'Yes/No', 'Multi-select', 'Checkboxes', 'Checkboxes + % input', 'Short Text', 'Long Form', 'Multi-line Text', 'Slider'].includes(currentQuestion?.format_type || '') && (
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
                 <p className="text-yellow-800">
                   Format type "{currentQuestion?.format_type}" not fully implemented. 
@@ -888,7 +772,7 @@ export const ReportForm: React.FC = () => {
             )}
           </div>
 
-          {/* Navigation */}
+          {/* SINGLE Navigation Section */}
           <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 pt-6 border-t border-gray-100">
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 order-2 lg:order-1">
               <button
