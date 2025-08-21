@@ -23,6 +23,31 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// In your server (e.g., Express.js)
+app.post('/api/get-receipt-url', async (req, res) => {
+  try {
+    const { payment_intent_id } = req.body;
+    
+    // Retrieve the payment intent from Stripe
+    const paymentIntent = await stripe.paymentIntents.retrieve(payment_intent_id);
+    
+    if (paymentIntent.latest_charge) {
+      // Get the charge to access receipt_url
+      const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+      
+      res.json({ 
+        receipt_url: charge.receipt_url,
+        charge_id: charge.id 
+      });
+    } else {
+      res.status(404).json({ error: 'No charge found for this payment' });
+    }
+  } catch (error) {
+    console.error('Error getting receipt URL:', error);
+    res.status(500).json({ error: 'Failed to get receipt URL' });
+  }
+});
+
 app.post('/api/trigger-ai-analysis', async (req, res) => {
   try {
     console.log('Triggering AI analysis...');

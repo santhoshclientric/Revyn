@@ -91,7 +91,8 @@ export const ReportForm: React.FC = () => {
   useEffect(() => {
     const loadCompanyInfo = async () => {
       if (user) {
-        if (currentPurchaseId && source === 'dashboard') {
+        // Always try to load company info from purchases table first
+        if (currentPurchaseId) {
           try {
             const { data: purchase, error } = await supabase
               .from('purchases')
@@ -100,37 +101,44 @@ export const ReportForm: React.FC = () => {
               .eq('user_id', user.id)
               .single();
 
-            if (!error && purchase) {
+            if (!error && purchase && purchase.company_name && purchase.company_name !== 'Demo Company') {
+              // Company info exists, skip company form
               setCompanyInfo({
-                companyName: purchase.company_name || 'Demo Company',
+                companyName: purchase.company_name,
                 email: purchase.company_email || user.email || ''
               });
+              console.log('Loaded existing company info from purchases:', purchase);
+              setShowCompanyForm(false);
             } else {
+              // Company info missing or is default, show company form
               setCompanyInfo({
-                companyName: 'Demo Company',
-                email: user.email || ''
+                companyName: purchase?.company_name || '',
+                email: purchase?.company_email || user.email || ''
               });
+              console.log('Company info missing or default, showing company form');
+              setShowCompanyForm(true);
             }
           } catch (error) {
             console.error('Error loading company info:', error);
             setCompanyInfo({
-              companyName: 'Demo Company',
+              companyName: '',
               email: user.email || ''
             });
+            setShowCompanyForm(true);
           }
-
-          setShowCompanyForm(false);
         } else {
-          setCompanyInfo(prev => ({
-            companyName: prev.companyName || '',
-            email: user.email || prev.email
-          }));
+          // No purchase ID, show company form
+          setCompanyInfo({
+            companyName: '',
+            email: user.email || ''
+          });
+          setShowCompanyForm(true);
         }
       }
     };
 
     loadCompanyInfo();
-  }, [user, currentPurchaseId, source]);
+  }, [user, currentPurchaseId]);
 
   // Load questions from database
   useEffect(() => {
@@ -244,6 +252,12 @@ export const ReportForm: React.FC = () => {
     try {
       setIsSaving(true);
       
+      console.log('Saving answer to database:', {
+        questionId,
+        answerData,
+        questionType: currentQuestion?.format_type
+      });
+      
       const { error } = await supabase
         .from('answers')
         .upsert({
@@ -258,8 +272,11 @@ export const ReportForm: React.FC = () => {
         });
 
       if (error) {
+        console.error('Supabase error saving answer:', error);
         throw new Error('Database error: ' + error.message);
       }
+
+      console.log(`Answer saved successfully for question ${questionId}`);
       
     } catch (error) {
       console.error('Error in saveAnswerToDatabase:', error);
@@ -400,13 +417,8 @@ export const ReportForm: React.FC = () => {
   };
 
   const handleBack = () => {
-    if (source === 'dashboard' || purchaseIdFromUrl) {
-      navigate('/dashboard');
-    } else if (paymentId || paymentIntentFromUrl) {
-      navigate('/payment');
-    } else {
-      navigate('/dashboard');
-    }
+    // Always go to dashboard, regardless of how user got here
+    navigate('/dashboard');
   };
 
   const getCurrentAnswer = () => {

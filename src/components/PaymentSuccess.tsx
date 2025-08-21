@@ -14,6 +14,7 @@ export const PaymentSuccess: React.FC = () => {
   const [paymentDetails, setPaymentDetails] = useState<any>(null);
   const [isRecordingPurchase, setIsRecordingPurchase] = useState(true);
   const [purchaseRecorded, setPurchaseRecorded] = useState(false);
+  const [isDownloadingReceipt, setIsDownloadingReceipt] = useState(false);
 
   // Get payment intent ID from either URL params or location state
   const paymentIntentId = searchParams.get('payment_intent') || location.state?.paymentIntentId;
@@ -60,9 +61,30 @@ export const PaymentSuccess: React.FC = () => {
           setPaymentDetails(result.paymentIntent);
           setPaymentStatus('success');
 
-          // If we have user and report data, record the purchase
+          // Check if purchase already exists before inserting
           if (user && reportIds.length > 0) {
             try {
+              // First check if this payment is already recorded
+              const { data: existingPurchase, error: checkError } = await supabase
+                .from('purchases')
+                .select('id')
+                .eq('user_id', user.id)
+                .eq('stripe_payment_id', paymentIntentId)
+                .single();
+
+              if (checkError && checkError.code !== 'PGRST116') {
+                // PGRST116 means no rows found, which is expected for new purchases
+                console.error('Error checking existing purchase:', checkError);
+                return;
+              }
+
+              if (existingPurchase) {
+                console.log('Purchase already exists in database:', existingPurchase.id);
+                setPurchaseRecorded(true);
+                return;
+              }
+
+              // If no existing purchase found, create new one
               const { data: purchase, error: purchaseError } = await supabase
                 .from('purchases')
                 .insert({
@@ -70,13 +92,22 @@ export const PaymentSuccess: React.FC = () => {
                   report_ids: reportIds,
                   amount: total,
                   stripe_payment_id: paymentIntentId,
-                  status: 'completed'
+                  status: 'completed',
+                  report_status: 'not_started',
+                  company_name: null, // Will be filled when user submits company form
+                  company_email: user.email
                 })
                 .select()
                 .single();
 
               if (purchaseError) {
-                console.error('Error recording purchase:', purchaseError);
+                // Check if it's a duplicate key error (purchase already exists)
+                if (purchaseError.code === '23505') {
+                  console.log('Purchase already exists (duplicate key), skipping insert');
+                  setPurchaseRecorded(true);
+                } else {
+                  console.error('Error recording purchase:', purchaseError);
+                }
               } else {
                 console.log('Purchase recorded successfully:', purchase);
                 setPurchaseRecorded(true);
@@ -96,8 +127,237 @@ export const PaymentSuccess: React.FC = () => {
       }
     };
 
-    verifyPaymentAndRecord();
-  }, [paymentIntentId, user, reportIds, total, stripeService]);
+    // Only run once per payment intent
+    if (paymentIntentId && !purchaseRecorded) {
+      verifyPaymentAndRecord();
+    }
+  }, [paymentIntentId, user, reportIds, total, stripeService, purchaseRecorded]);
+
+  const handleContinueToForm = () => {
+    if (reportIds && reportIds.length > 0) {
+      // Navigate to the first report form
+      window.location.href = `/form/${reportIds[0]}?payment_intent=${paymentIntentId}`;
+    }
+  };
+
+  const handleDownloadReceipt = async () => {
+    if (!paymentIntentId) {
+      alert('Payment information not available');
+      return;
+    }
+
+    setIsDownloadingReceipt(true);
+
+    try {
+      // First, try to get the receipt URL from Stripe via your server
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api/get-receipt-url`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          payment_intent_id: paymentIntentId
+        }),
+      });
+
+      if (response.ok) {
+        const { receipt_url } = await response.json();
+        
+        if (receipt_url) {
+          // Open Stripe receipt in new tab
+          window.open(receipt_url, '_blank', 'noopener,noreferrer');
+          return;
+        }
+      }
+      
+      // Fallback: generate a simple receipt
+      generateSimpleReceipt();
+      
+    } catch (error) {
+      console.error('Error getting receipt URL:', error);
+      // Fallback: generate a simple receipt
+      generateSimpleReceipt();
+    } finally {
+      setIsDownloadingReceipt(false);
+    }
+  };
+
+  const generateSimpleReceipt = () => {
+    // Generate a professional HTML receipt and trigger download
+    const receiptHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receipt - Revyn Marketing AI Audit</title>
+        <style>
+          body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            max-width: 600px; 
+            margin: 0 auto; 
+            padding: 40px 20px; 
+            background: #f9fafb;
+          }
+          .receipt { 
+            background: white; 
+            padding: 40px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header { 
+            text-align: center; 
+            border-bottom: 3px solid #3b82f6; 
+            padding-bottom: 20px; 
+            margin-bottom: 30px; 
+          }
+          .logo { 
+            color: #3b82f6; 
+            font-size: 32px; 
+            font-weight: bold; 
+            margin-bottom: 10px;
+          }
+          .subtitle { 
+            color: #6b7280; 
+            font-size: 14px; 
+          }
+          .details { 
+            margin: 30px 0; 
+            display: grid; 
+            gap: 12px;
+          }
+          .detail-row { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 8px 0;
+            border-bottom: 1px solid #f3f4f6;
+          }
+          .detail-row:last-child { border-bottom: none; }
+          .label { font-weight: 600; color: #374151; }
+          .value { color: #6b7280; }
+          .items { 
+            margin: 20px 0; 
+            border: 1px solid #e5e7eb; 
+            border-radius: 8px; 
+            overflow: hidden;
+          }
+          .item { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 12px 16px; 
+            border-bottom: 1px solid #f3f4f6;
+          }
+          .item:last-child { border-bottom: none; }
+          .total { 
+            background: #f3f4f6; 
+            padding: 16px; 
+            border-radius: 8px; 
+            margin: 20px 0;
+          }
+          .total-row { 
+            display: flex; 
+            justify-content: space-between; 
+            font-size: 20px; 
+            font-weight: bold; 
+            color: #3b82f6; 
+          }
+          .footer { 
+            margin-top: 40px; 
+            padding-top: 20px; 
+            border-top: 1px solid #e5e7eb; 
+            font-size: 12px; 
+            color: #6b7280; 
+            text-align: center;
+          }
+          .success-badge {
+            background: #10b981;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 20px;
+          }
+          @media print {
+            body { background: white; }
+            .receipt { box-shadow: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="header">
+            <div class="logo">Revyn</div>
+            <div class="subtitle">Marketing AI Platform</div>
+            <h2 style="margin: 20px 0 10px 0; color: #1f2937;">Payment Receipt</h2>
+            <div class="success-badge">✓ Payment Successful</div>
+          </div>
+          
+          <div class="details">
+            <div class="detail-row">
+              <span class="label">Receipt #:</span>
+              <span class="value">${paymentIntentId?.slice(-12).toUpperCase()}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Payment ID:</span>
+              <span class="value">${paymentIntentId}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Date & Time:</span>
+              <span class="value">${new Date().toLocaleString()}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Customer Email:</span>
+              <span class="value">${user?.email || 'N/A'}</span>
+            </div>
+            <div class="detail-row">
+              <span class="label">Payment Method:</span>
+              <span class="value">Credit Card</span>
+            </div>
+          </div>
+
+          <h3 style="color: #1f2937; margin: 30px 0 15px 0;">Items Purchased:</h3>
+          <div class="items">
+            ${selectedReports.map(report => `
+              <div class="item">
+                <span>${report.name}</span>
+                <span style="font-weight: 600;">$${report.price}</span>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="total">
+            <div class="total-row">
+              <span>Total Amount:</span>
+              <span>$${total}.00</span>
+            </div>
+          </div>
+
+          <div class="footer">
+            <p style="margin-bottom: 10px;">
+              <strong>Thank you for your purchase!</strong><br>
+              This receipt was generated on ${new Date().toLocaleString()}
+            </p>
+            <p style="margin: 0;">
+              Questions? Contact us at <strong>support@revyn.com</strong><br>
+              Revyn - Transform your marketing with AI-powered insights
+            </p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    // Create blob and download
+    const blob = new Blob([receiptHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `revyn-receipt-${paymentIntentId?.slice(-8) || new Date().getTime()}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   if (paymentStatus === 'loading') {
     return (
@@ -147,13 +407,6 @@ export const PaymentSuccess: React.FC = () => {
       </div>
     );
   }
-
-  const handleContinueToForm = () => {
-    if (reportIds && reportIds.length > 0) {
-      // Navigate to the first report form
-      window.location.href = `/form/${reportIds[0]}?payment_intent=${paymentIntentId}`;
-    }
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4">
@@ -233,9 +486,22 @@ export const PaymentSuccess: React.FC = () => {
               View My Reports
             </Link>
             
-            <button className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center">
-              <Download className="w-4 h-4 mr-2" />
-              Download Receipt
+            <button 
+              onClick={handleDownloadReceipt}
+              disabled={isDownloadingReceipt}
+              className="px-8 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDownloadingReceipt ? (
+                <>
+                  <Loader className="w-4 h-4 mr-2 animate-spin" />
+                  Getting Receipt...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Receipt
+                </>
+              )}
             </button>
           </div>
 
