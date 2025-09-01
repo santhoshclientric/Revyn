@@ -17,6 +17,10 @@ import { ReportsPage } from './components/ReportsPage';
 import { Dashboard } from './components/Dashboard';
 import { ReportViewPage } from './components/ReportViewPage';
 
+import { ReportChatInterface } from './components/ReportChatInterface';
+import { ReportChatPage } from './components/ReportChatPage';
+
+
 // ScrollToTop component
 const ScrollToTop: React.FC = () => {
   const { pathname } = useLocation();
@@ -133,6 +137,8 @@ const AppContent: React.FC = () => {
           <Route path="/contact" element={<Contact />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/chat" element={<ReportChatInterface />} />
+
           <Route path="/payment-success" element={<PaymentSuccess />} />
         </Routes>
       </main>

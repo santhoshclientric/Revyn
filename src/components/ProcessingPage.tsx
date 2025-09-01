@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Brain, Loader } from 'lucide-react';
-import { AIService } from '../services/aiService';
+import { AIService } from '../services/aiChatService';
 import { supabase } from '../config/supabase';
 import { useAuth } from '../contexts/AuthContext';
 

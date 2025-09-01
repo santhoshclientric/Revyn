@@ -51,8 +51,10 @@ export class StripeService {
     try {
       console.log('Creating payment intent with data:', data);
       console.log('API URL:', this.apiUrl);
+
+      const serverurl = import.meta.env.VITE_API_URL;
       
-      const response = await fetch(`${this.apiUrl}/api/create-payment-intent`, {
+      const response = await fetch(`${serverurl}/api/create-payment-intent`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

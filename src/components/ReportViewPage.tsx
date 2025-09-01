@@ -9,26 +9,29 @@ import { ArrowLeft, Download, MessageCircle, Loader, Brain, AlertTriangle, Eye }
 import { AIReportViewer } from '../components/AIReportViewer';
 
 interface Purchase {
-  id: string;
-  user_id: string;
-  report_ids: string[];
-  amount: number;
-  status: string;
-  report_status: string;
-  created_at: string;
-  stripe_payment_id: string;
-  company_name: string;
-  company_email: string;
-}
+    id: string;
+    user_id: string;
+    report_ids: string[];
+    amount: number;
+    status: string;
+    report_status: string;
+    created_at: string;
+    stripe_payment_id: string;
+    company_name: string;
+    company_email: string;
+    chat_subscription_status: string;
+    chat_stripe_subscription_id: string;
+    chat_subscription_end_date: string;
+  }
 
-interface AIResult {
-  id: string;
-  purchase_id: string;
-  result_data: any;
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
+  interface AIResult {
+    id: string;
+    purchase_id: string;
+    result_data: any;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  }
 
 export const ReportViewPage: React.FC = () => {
   const location = useLocation();
@@ -167,7 +170,8 @@ export const ReportViewPage: React.FC = () => {
       state: { 
         reportData: aiResult?.result_data, 
         purchaseId,
-        companyName: purchase?.company_name
+        companyName: purchase?.company_name,
+        user
       } 
     });
   };
@@ -222,15 +226,16 @@ export const ReportViewPage: React.FC = () => {
   // Render the report using AIReportViewer
   return (
     <AIReportViewer
-    reportData={{
+      reportData={{
         ...aiResult?.result_data,
         website_analysis: aiResult?.website_analysis
       }}
-      
       companyName={purchase.company_name || 'Your Company'}
       onBack={handleBack}
       onDownload={handleDownload}
       onStartChat={handleStartChat}
+      user={user}
+      purchaseId={purchaseId}
     />
   );
 };

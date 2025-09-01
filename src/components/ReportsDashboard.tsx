@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../config/supabase';
 import { reportTypes } from '../data/reportTypes';
 import { ReportSubmission, GeneratedReport, ReportAnswer } from '../types/reports';
-import { AIService } from '../services/aiService';
+import { AIService } from '../services/aiChatService';
 import { StripeService } from '../services/stripeService';
 import { Brain, Loader, CheckCircle, DollarSign, ShoppingCart, Eye, Clock, AlertCircle, FileText, RefreshCw } from 'lucide-react';
 
