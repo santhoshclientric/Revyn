@@ -2260,8 +2260,6 @@ const pollAndStreamWithStorage = async (res, threadId, runId, sessionId, message
   }
 };
 
-
-
 // 6. DELETE/ARCHIVE CHAT SESSION
 app.delete('/api/chat-sessions/:sessionId', async (req, res) => {
   try {
@@ -2323,8 +2321,6 @@ app.get('/api/reports/:purchaseId/summary', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-
 
 // Get detailed session info (for debugging)
 app.get('/api/admin/chat-sessions/:sessionId/debug', async (req, res) => {
