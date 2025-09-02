@@ -856,9 +856,23 @@ export const ReportChatInterface: React.FC = () => {
     showWelcomeMessage();
   };
 
-  // Auto-scroll to bottom when messages change
+  // Auto-scroll to bottom when messages change - FIX: Only scroll chat container
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // Only scroll if the messages container is visible and has content
+    if (messagesEndRef.current && messages.length > 0) {
+      const messagesContainer = messagesEndRef.current.closest('.overflow-y-auto');
+      if (messagesContainer) {
+        // Scroll only the messages container, not the whole page
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      } else {
+        // Fallback: use scrollIntoView with options to prevent page scroll
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'end',
+          inline: 'nearest' 
+        });
+      }
+    }
   }, [messages]);
 
   // Debug function to check current state
@@ -928,7 +942,7 @@ export const ReportChatInterface: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Add custom styles for formatted messages */}
+      {/* Add custom styles for formatted messages - Tighter spacing */}
       <style>{`
         .formatted-message h3 {
           font-size: 1.125rem;
@@ -936,14 +950,16 @@ export const ReportChatInterface: React.FC = () => {
           color: #111827;
           margin-top: 1rem;
           margin-bottom: 0.5rem;
-          line-height: 1.25;
+          line-height: 1.3;
+          border-bottom: 1px solid #e5e7eb;
+          padding-bottom: 0.25rem;
         }
         .formatted-message ul {
-          margin: 0.75rem 0;
+          margin: 0.5rem 0;
           padding-left: 0;
         }
         .formatted-message li {
-          margin-bottom: 0.5rem;
+          margin-bottom: 0.25rem;
           line-height: 1.5;
           padding-left: 1rem;
           position: relative;
@@ -954,13 +970,31 @@ export const ReportChatInterface: React.FC = () => {
         }
         .formatted-message br {
           display: block;
-          margin: 0.5rem 0;
+          margin: 0.25rem 0;
+        }
+        .formatted-message p {
+          margin-bottom: 0.5rem;
+          line-height: 1.5;
+        }
+        .formatted-message {
+          max-width: none;
+          width: 100%;
+        }
+        /* Reduce spacing between consecutive elements */
+        .formatted-message h3 + p {
+          margin-top: 0.25rem;
+        }
+        .formatted-message p + ul {
+          margin-top: 0.25rem;
+        }
+        .formatted-message ul + p {
+          margin-top: 0.5rem;
         }
       `}</style>
       
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+        <div className="w-full flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <button
               onClick={handleBack}
@@ -1012,10 +1046,10 @@ export const ReportChatInterface: React.FC = () => {
         </div>
       </div>
 
-      {/* Chat Container */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[70vh] flex flex-col">
-          {/* Messages */}
+      {/* Chat Container - Full Width */}
+      <div className="w-full px-4 py-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[75vh] flex flex-col">
+          {/* Messages - Full Width */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {messages.map((message) => (
               <div
@@ -1023,21 +1057,21 @@ export const ReportChatInterface: React.FC = () => {
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-3xl px-4 py-2 rounded-lg ${
+                  className={`w-full max-w-none px-6 py-4 rounded-lg ${
                     message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
+                      ? 'bg-blue-600 text-white max-w-2xl ml-auto'
+                      : 'bg-gray-100 text-gray-900 max-w-full'
                   }`}
                 >
-                  <div className="flex items-start space-x-2">
+                  <div className="flex items-start space-x-3">
                     {message.role === 'assistant' && (
-                      <Bot className="w-5 h-5 mt-0.5 text-blue-600 flex-shrink-0" />
+                      <Bot className="w-6 h-6 mt-1 text-blue-600 flex-shrink-0" />
                     )}
                     {message.role === 'user' && (
-                      <User className="w-5 h-5 mt-0.5 text-white flex-shrink-0" />
+                      <User className="w-6 h-6 mt-1 text-white flex-shrink-0" />
                     )}
-                    <div className="flex-1">
-                      <div className={`prose prose-sm max-w-none ${
+                    <div className="flex-1 min-w-0">
+                      <div className={`prose prose-base max-w-none ${
                         message.role === 'user' ? 'prose-invert' : ''
                       }`}>
                         {message.role === 'assistant' ? (
@@ -1047,7 +1081,7 @@ export const ReportChatInterface: React.FC = () => {
                         )}
                       </div>
                       {message.isStreaming && (
-                        <div className="flex items-center mt-2">
+                        <div className="flex items-center mt-3">
                           <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse mr-1"></div>
                           <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse mr-1 delay-75"></div>
                           <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse delay-150"></div>
@@ -1061,16 +1095,16 @@ export const ReportChatInterface: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggested Questions */}
+          {/* Suggested Questions - Full Width */}
           {currentTabState.followUpQuestions.length > 0 && messages.length <= 1 && !isTyping && (
             <div className="px-6 py-4 border-t border-gray-200">
               <p className="text-sm text-gray-600 mb-3">Try asking:</p>
-              <div className="space-y-2">
-                {currentTabState.followUpQuestions.slice(0, 5).map((question, index) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {currentTabState.followUpQuestions.slice(0, 6).map((question, index) => (
                   <button
                     key={index}
                     onClick={() => handleFollowUpClick(question)}
-                    className={`block w-full text-left px-4 py-3 rounded-lg border transition-all duration-200 text-sm hover:shadow-sm ${
+                    className={`text-left px-4 py-3 rounded-lg border transition-all duration-200 text-sm hover:shadow-sm ${
                       activeTab === 'marketing'
                         ? 'border-green-200 bg-green-50 hover:bg-green-100 text-green-800'
                         : 'border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800'
@@ -1094,22 +1128,24 @@ export const ReportChatInterface: React.FC = () => {
             </div>
           )}
 
-          {/* Input */}
+          {/* Input - Smaller Height */}
           <div className="p-6 border-t border-gray-200">
-            <div className="flex items-center space-x-4">
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder={`Ask me anything about your ${activeTab} analysis...`}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                disabled={isTyping}
-              />
+            <div className="flex items-end space-x-4">
+              <div className="flex-1">
+                <textarea
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={`Ask me anything about your ${activeTab} analysis...`}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  rows={2}
+                  disabled={isTyping}
+                />
+              </div>
               <button
                 onClick={() => handleSendMessage()}
                 disabled={!inputMessage.trim() || isTyping}
-                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="p-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
               >
                 {isTyping ? (
                   <Loader className="w-5 h-5 animate-spin" />
@@ -1118,6 +1154,9 @@ export const ReportChatInterface: React.FC = () => {
                 )}
               </button>
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Press Enter to send, Shift+Enter for new line
+            </p>
           </div>
         </div>
       </div>
