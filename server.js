@@ -1287,6 +1287,7 @@ app.use((error, req, res, next) => {
   });
 });
 
+// FIXED: Marketing Report Context Formatter
 function formatMarketingReportContext(reportData) {
   try {
     if (typeof reportData === 'string') return reportData;
@@ -1299,28 +1300,80 @@ function formatMarketingReportContext(reportData) {
         contextText += `OVERALL MARKETING SCORE: ${reportData.overall_score}/100\n\n`;
       }
       
-      // Key sections from marketing audit
-      Object.keys(reportData).forEach(key => {
-        if (typeof reportData[key] === 'object' && reportData[key] !== null) {
-          contextText += `${key.toUpperCase()}:\n`;
-          if (Array.isArray(reportData[key])) {
-            reportData[key].forEach((item, i) => {
-              contextText += `${i+1}. ${typeof item === 'object' ? JSON.stringify(item) : item}\n`;
-            });
-          } else {
-            contextText += `${JSON.stringify(reportData[key], null, 2)}\n`;
-          }
-          contextText += '\n';
+      // Specific marketing sections
+      if (reportData["1. 🎯 Target Audience & Positioning"]) {
+        contextText += `TARGET AUDIENCE & POSITIONING:\n`;
+        const audience = reportData["1. 🎯 Target Audience & Positioning"];
+        if (Array.isArray(audience)) {
+          audience.forEach((item, i) => {
+            contextText += `${i+1}. ${item}\n`;
+          });
+        } else if (typeof audience === 'object') {
+          Object.entries(audience).forEach(([key, value]) => {
+            contextText += `${key}: ${value}\n`;
+          });
         }
-      });
+        contextText += '\n';
+      }
+      
+      if (reportData["2. 📊 Marketing Funnel & Customer Journey"]) {
+        contextText += `MARKETING FUNNEL ANALYSIS:\n`;
+        const funnel = reportData["2. 📊 Marketing Funnel & Customer Journey"];
+        if (Array.isArray(funnel)) {
+          funnel.forEach((item, i) => {
+            contextText += `${i+1}. ${item}\n`;
+          });
+        }
+        contextText += '\n';
+      }
+      
+      if (reportData["3. 🔧 Tech Stack & Marketing Operations"]) {
+        contextText += `TECH STACK & OPERATIONS:\n`;
+        const techStack = reportData["3. 🔧 Tech Stack & Marketing Operations"];
+        if (Array.isArray(techStack)) {
+          techStack.forEach((item, i) => {
+            contextText += `${i+1}. ${item}\n`;
+          });
+        }
+        contextText += '\n';
+      }
+      
+      if (reportData["4. 💰 Budget & Resource Allocation"]) {
+        contextText += `BUDGET & RESOURCE ALLOCATION:\n`;
+        const budget = reportData["4. 💰 Budget & Resource Allocation"];
+        if (Array.isArray(budget)) {
+          budget.forEach((item, i) => {
+            contextText += `${i+1}. ${item}\n`;
+          });
+        }
+        contextText += '\n';
+      }
       
       // Growth Plan
       if (reportData["5. 📈 Growth & Scaling Plan"]) {
-        contextText += `GROWTH PLAN:\n`;
+        contextText += `GROWTH & SCALING PLAN:\n`;
         const plan = reportData["5. 📈 Growth & Scaling Plan"];
-        if (plan["30 Days"]) contextText += `30-Day Actions:\n${plan["30 Days"].map((a, i) => `${i+1}. ${a}`).join('\n')}\n\n`;
-        if (plan["90 Days"]) contextText += `90-Day Goals:\n${plan["90 Days"].map((g, i) => `${i+1}. ${g}`).join('\n')}\n\n`;
-        if (plan["365 Days"]) contextText += `1-Year Vision:\n${plan["365 Days"].map((v, i) => `${i+1}. ${v}`).join('\n')}\n\n`;
+        if (plan["30 Days"]) {
+          contextText += `30-Day Actions:\n${plan["30 Days"].map((a, i) => `${i+1}. ${a}`).join('\n')}\n\n`;
+        }
+        if (plan["90 Days"]) {
+          contextText += `90-Day Goals:\n${plan["90 Days"].map((g, i) => `${i+1}. ${g}`).join('\n')}\n\n`;
+        }
+        if (plan["365 Days"]) {
+          contextText += `1-Year Vision:\n${plan["365 Days"].map((v, i) => `${i+1}. ${v}`).join('\n')}\n\n`;
+        }
+      }
+      
+      // Social Media Performance
+      if (reportData["6. 📲 Social Channel Performance Overview"]) {
+        contextText += `SOCIAL MEDIA PERFORMANCE:\n`;
+        const social = reportData["6. 📲 Social Channel Performance Overview"];
+        Object.entries(social).forEach(([platform, data]) => {
+          if (typeof data === 'object' && data.Score) {
+            contextText += `${platform}: Score ${data.Score}/100 (${data.Status})\n`;
+          }
+        });
+        contextText += '\n';
       }
       
       // Tools Recommendations
@@ -1331,6 +1384,15 @@ function formatMarketingReportContext(reportData) {
         });
         contextText += '\n';
       }
+      
+      // Follow-up questions if available
+      if (reportData.follow_up && Array.isArray(reportData.follow_up)) {
+        contextText += `SUGGESTED DISCUSSION TOPICS:\n`;
+        reportData.follow_up.forEach((question, i) => {
+          contextText += `${i+1}. ${question}\n`;
+        });
+        contextText += '\n';
+      }
     }
     
     return contextText;
@@ -1338,7 +1400,10 @@ function formatMarketingReportContext(reportData) {
     console.error('Error formatting marketing context:', error);
     return JSON.stringify(reportData, null, 2);
   }
+}
 
+// FIXED: Website Analysis Context Formatter (separate function)
+function formatWebsiteAnalysisContext(websiteData) {
   try {
     if (typeof websiteData === 'string') {
       return websiteData;
@@ -1444,112 +1509,10 @@ function formatMarketingReportContext(reportData) {
         });
         contextText += `\n`;
       }
-    }
-    
-    return contextText;
-  } catch (error) {
-    console.error('Error formatting website analysis context:', error);
-    return JSON.stringify(websiteData, null, 2);
-  }
-}
-
-// Website Analysis Context Formatter
-function formatWebsiteAnalysisContext(websiteData) {
-  try {
-    let contextText = '';
-    
-    if (typeof websiteData === 'string') return websiteData;
-    
-    if (typeof websiteData === 'object') {
-      // Overall Score and Status
-      if (websiteData.score) {
-        contextText += `=== WEBSITE PERFORMANCE SCORE ===\n`;
-        contextText += `Overall Score: ${websiteData.score.value}/100 (${websiteData.score.status})\n\n`;
-      }
       
-      // Analysis Categories
-      if (websiteData.analysis) {
-        const analysis = websiteData.analysis;
-        
-        // Content Quality Analysis
-        if (analysis.content_quality) {
-          contextText += `=== CONTENT QUALITY ANALYSIS ===\n`;
-          analysis.content_quality.forEach((issue, i) => {
-            contextText += `${i+1}. ${issue}\n`;
-          });
-          contextText += `\n`;
-        }
-        
-        // SEO Discoverability
-        if (analysis.seo_discoverability) {
-          contextText += `=== SEO DISCOVERABILITY ISSUES ===\n`;
-          analysis.seo_discoverability.forEach((issue, i) => {
-            contextText += `${i+1}. ${issue}\n`;
-          });
-          contextText += `\n`;
-        }
-        
-        // Branding Consistency
-        if (analysis.branding_consistency) {
-          contextText += `=== BRANDING CONSISTENCY ASSESSMENT ===\n`;
-          analysis.branding_consistency.forEach((issue, i) => {
-            contextText += `${i+1}. ${issue}\n`;
-          });
-          contextText += `\n`;
-        }
-        
-        // Conversion Readiness
-        if (analysis.conversion_readiness) {
-          contextText += `=== CONVERSION READINESS ANALYSIS ===\n`;
-          analysis.conversion_readiness.forEach((issue, i) => {
-            contextText += `${i+1}. ${issue}\n`;
-          });
-          contextText += `\n`;
-        }
-        
-        // Navigation Usability
-        if (analysis.navigation_usability) {
-          contextText += `=== NAVIGATION & USABILITY ANALYSIS ===\n`;
-          analysis.navigation_usability.forEach((issue, i) => {
-            contextText += `${i+1}. ${issue}\n`;
-          });
-          contextText += `\n`;
-        }
-      }
-      
-      // Specific Recommendations
-      if (websiteData.recommendations) {
-        contextText += `=== PRIORITY RECOMMENDATIONS ===\n`;
-        websiteData.recommendations.forEach((rec, i) => {
-          contextText += `${i+1}. ${rec}\n`;
-        });
-        contextText += `\n`;
-      }
-      
-      // Priority Roadmap
-      if (websiteData.priority_roadmap) {
-        contextText += `=== IMPLEMENTATION ROADMAP ===\n`;
-        
-        if (websiteData.priority_roadmap["30_days"]) {
-          contextText += `30-Day Priorities:\n`;
-          websiteData.priority_roadmap["30_days"].forEach((task, i) => {
-            contextText += `${i+1}. ${task}\n`;
-          });
-          contextText += `\n`;
-        }
-        
-        if (websiteData.priority_roadmap["60_days"]) {
-          contextText += `60-Day Goals:\n`;
-          websiteData.priority_roadmap["60_days"].forEach((task, i) => {
-            contextText += `${i+1}. ${task}\n`;
-          });
-          contextText += `\n`;
-        }
-      }
-      
-      // Follow-up Topics
-      if (websiteData.follow_up) {
-        contextText += `=== SUGGESTED DISCUSSION TOPICS ===\n`;
+      // Follow-up topics
+      if (websiteData.follow_up && Array.isArray(websiteData.follow_up)) {
+        contextText += `SUGGESTED DISCUSSION TOPICS:\n`;
         websiteData.follow_up.forEach((question, i) => {
           contextText += `${i+1}. ${question}\n`;
         });
