@@ -96,10 +96,18 @@ export const ReportChatInterface: React.FC = () => {
   const locationData = location.state || {};
   
   const purchaseId = purchaseIdFromUrl || locationData.purchaseId;
-  const initialReportType = reportTypeFromUrl || 'marketing';
   
-  // State management
-  const [activeTab, setActiveTab] = useState<'marketing' | 'website'>(initialReportType as 'marketing' | 'website');
+  // CRITICAL FIX: Don't override initialReportType with 'marketing' default
+  const [activeTab, setActiveTab] = useState<'marketing' | 'website'>(() => {
+    const urlReportType = searchParams.get('report_type');
+    if (urlReportType === 'website' || urlReportType === 'marketing') {
+      console.log('Setting initial tab from URL:', urlReportType);
+      return urlReportType as 'marketing' | 'website';
+    }
+    console.log('Using default tab: marketing');
+    return 'marketing';
+  });
+  
   const [tabStates, setTabStates] = useState<{marketing: TabState, website: TabState}>({
     marketing: {
       sessionId: null,
@@ -131,7 +139,6 @@ export const ReportChatInterface: React.FC = () => {
 
   // CRITICAL FIX: Prevent all window focus/visibility reloads
   useEffect(() => {
-    // Don't set up event listeners that cause reloads
     console.log('Chat interface mounted - visibility change handlers disabled for this component');
     
     // Store current state before page unload only
@@ -154,13 +161,11 @@ export const ReportChatInterface: React.FC = () => {
 
   // AUTHENTICATION AND INITIAL LOAD - Only run once
   useEffect(() => {
-    // Skip if already loading or initialized
     if (isCurrentlyLoading.current || hasInitialized.current) {
       console.log('Skipping initialization - already done or in progress');
       return;
     }
 
-    // Don't redirect if auth is still loading
     if (authLoading) {
       console.log('Auth still loading, waiting...');
       return;
@@ -179,12 +184,28 @@ export const ReportChatInterface: React.FC = () => {
       return;
     }
 
+    // CRITICAL FIX: Ensure URL parameters are properly set before initialization
+    const urlParams = new URLSearchParams(location.search);
+    const urlReportType = urlParams.get('report_type');
+    const urlPurchaseId = urlParams.get('purchase_id');
+    
+    // Fix URL if parameters are missing or incorrect
+    if (!urlReportType || !urlPurchaseId) {
+      console.log('Fixing missing URL parameters');
+      const newSearchParams = new URLSearchParams();
+      newSearchParams.set('purchase_id', purchaseId);
+      newSearchParams.set('report_type', activeTab);
+      
+      const newUrl = `${location.pathname}?${newSearchParams.toString()}`;
+      window.history.replaceState(window.history.state, '', newUrl);
+    }
+    
     // Set loading flag to prevent duplicate initialization
     isCurrentlyLoading.current = true;
     console.log('Starting initialization for purchase:', purchaseId);
     
     initializePersistentData();
-  }, [user, authLoading, purchaseId]); // Minimal dependencies
+  }, [user, authLoading, purchaseId, location.search]);
 
   // Handle browser back/forward navigation for tab changes
   useEffect(() => {
@@ -308,8 +329,12 @@ export const ReportChatInterface: React.FC = () => {
   };
 
   const initializeCurrentTab = async () => {
-    const tabToInitialize = activeTab; // Capture current activeTab value
-    
+    // Use initializeSpecificTab with the current activeTab
+    await initializeSpecificTab(activeTab);
+  };
+
+  // FIXED: New function that initializes a specific tab, not the current activeTab
+  const initializeSpecificTab = async (tabToInitialize: 'marketing' | 'website') => {
     try {
       console.log(`Initializing ${tabToInitialize} tab`);
 
@@ -327,20 +352,16 @@ export const ReportChatInterface: React.FC = () => {
       const sessions = result[tabToInitialize] || [];
       console.log(`Found ${sessions.length} existing sessions for ${tabToInitialize}`);
       
-      // Load suggested questions first (needed for both cases)
-      await loadSuggestedQuestions();
+      // Load suggested questions for the specific tab
+      await loadSuggestedQuestions(tabToInitialize);
       
       if (sessions && sessions.length > 0) {
-        // Load existing session messages
         const session = sessions[0];
-        console.log('Loading existing session:', session.id);
+        console.log(`Loading existing ${tabToInitialize} session:`, session.id);
         
         const sessionHistory = await loadSessionHistoryForTab(session.id);
         
-        // CRITICAL FIX: Don't show welcome message if we have actual conversation history
-        const hasRealMessages = sessionHistory.length > 0;
-        
-        if (hasRealMessages) {
+        if (sessionHistory.length > 0) {
           console.log(`Setting ${sessionHistory.length} historical messages for ${tabToInitialize}`);
           setTabStates(prev => ({
             ...prev,
@@ -352,13 +373,13 @@ export const ReportChatInterface: React.FC = () => {
             }
           }));
         } else {
-          console.log('No actual messages found, showing welcome message');
+          console.log(`No actual messages found for ${tabToInitialize}, showing welcome message`);
           showWelcomeMessageForTab(tabToInitialize);
           setTabStates(prev => ({
             ...prev,
             [tabToInitialize]: {
-              sessionId: session.id, // Keep the session ID even with welcome message
-              messages: prev[tabToInitialize].messages, // Keep the welcome message
+              sessionId: session.id,
+              messages: prev[tabToInitialize].messages,
               followUpQuestions: prev[tabToInitialize].followUpQuestions,
               isInitialized: true
             }
@@ -366,8 +387,7 @@ export const ReportChatInterface: React.FC = () => {
         }
         
       } else {
-        // No existing session - show welcome message
-        console.log('No existing sessions, showing welcome message');
+        console.log(`No existing sessions for ${tabToInitialize}, showing welcome message`);
         showWelcomeMessageForTab(tabToInitialize);
         
         setTabStates(prev => ({
@@ -381,8 +401,7 @@ export const ReportChatInterface: React.FC = () => {
       }
 
     } catch (error) {
-      console.error('Error initializing current tab:', error);
-      // Fallback to welcome message with questions
+      console.error(`Error initializing ${tabToInitialize} tab:`, error);
       showWelcomeMessageForTab(tabToInitialize);
       setTabStates(prev => ({
         ...prev,
@@ -409,7 +428,6 @@ export const ReportChatInterface: React.FC = () => {
       const data = await response.json();
       console.log('Session history response:', data);
       
-      // CRITICAL FIX: Ensure we're using the correct timestamp field
       const formattedMessages = data.messages.map((msg: any) => ({
         id: msg.id || `msg_${msg.message_order}_${Date.now()}`,
         role: msg.role,
@@ -431,37 +449,18 @@ export const ReportChatInterface: React.FC = () => {
 
   const loadSessionHistory = async (sessionId: string) => {
     try {
-      console.log('Loading session history for:', sessionId);
-
-      const serverUrl = import.meta.env.VITE_API_URL;
-      const response = await fetch(`${serverUrl}/api/chat-sessions/${sessionId}/messages`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Session history response:', data);
+      const sessionHistory = await loadSessionHistoryForTab(sessionId);
       
-      const formattedMessages = data.messages.map((msg: any) => ({
-        id: msg.id,
-        role: msg.role,
-        content: msg.content,
-        timestamp: new Date(msg.timestamp)
-      }));
-
-      console.log(`Loaded ${formattedMessages.length} messages from session ${sessionId}`);
-
-      // Update tab state with loaded messages
       setTabStates(prev => ({
         ...prev,
         [activeTab]: {
           ...prev[activeTab],
           sessionId: sessionId,
-          messages: formattedMessages
+          messages: sessionHistory
         }
       }));
 
-      return formattedMessages;
+      return sessionHistory;
 
     } catch (error) {
       console.error('Error loading session history:', error);
@@ -550,6 +549,7 @@ export const ReportChatInterface: React.FC = () => {
     }));
   };
 
+  // COMPLETELY REWRITTEN: handleSendMessage without scope issues
   const handleSendMessage = async (messageContent?: string) => {
     const content = messageContent || inputMessage.trim();
     if (!content || isTyping) return;
@@ -587,18 +587,16 @@ export const ReportChatInterface: React.FC = () => {
     setIsTyping(true);
 
     try {
-      let response: Response;
       const serverUrl = import.meta.env.VITE_API_URL;
+      let response: Response;
 
       if (currentSessionId) {
-        // Continue existing session
         response = await fetch(`${serverUrl}/api/chat-sessions/${currentSessionId}/message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ message: content })
         });
       } else {
-        // Create new session
         response = await fetch(`${serverUrl}/api/chat-sessions/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -614,16 +612,57 @@ export const ReportChatInterface: React.FC = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Handle streaming response with better error handling
-      const reader = response.body?.getReader();
-      if (!reader) {
-        // Non-streaming response fallback
-        try {
-          const data = await response.json();
-          if (data.messages && Array.isArray(data.messages)) {
-            const lastMessage = data.messages[data.messages.length - 1];
-            if (lastMessage && lastMessage.role === 'assistant') {
-              streamedContent = lastMessage.content;
+      // Handle response based on content type
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType && contentType.includes('text/event-stream')) {
+        console.log('Processing streaming response');
+        await processStreamingResponse(response, tempAssistantId);
+      } else {
+        console.log('Processing non-streaming response');
+        await processNonStreamingResponse(response, tempAssistantId);
+      }
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      handleMessageError(tempAssistantId, error);
+    }
+  };
+
+  // FIXED: Separate streaming handler with proper variable scope
+  const processStreamingResponse = async (response: Response, tempAssistantId: string) => {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response stream available');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accumulatedContent = ''; // Local variable with clear name
+    let newSessionId = currentSessionId;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log('Stream reading completed');
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+
+          if (trimmed.startsWith('data: ')) {
+            const data = trimmed.slice(6);
+            
+            if (data === '[DONE]') {
+              console.log('Received [DONE] - finalizing message');
+              setIsTyping(false);
               
               setTabStates(prev => ({
                 ...prev,
@@ -631,86 +670,19 @@ export const ReportChatInterface: React.FC = () => {
                   ...prev[activeTab],
                   messages: prev[activeTab].messages.map(msg =>
                     msg.id === tempAssistantId
-                      ? { ...msg, content: streamedContent, isStreaming: false }
+                      ? { ...msg, isStreaming: false, content: accumulatedContent }
                       : msg
                   )
                 }
               }));
+              return;
             }
-          }
-          
-          if (data.chat_session_id && !newSessionId) {
-            setTabStates(prev => ({
-              ...prev,
-              [activeTab]: {
-                ...prev[activeTab],
-                sessionId: data.chat_session_id
-              }
-            }));
-          }
-          
-          setIsTyping(false);
-          return;
-        } catch (parseError) {
-          console.error('Failed to parse non-streaming response:', parseError);
-          throw new Error('Failed to get response from server');
-        }
-      }
 
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let hasReceivedData = false;
-      let timeoutId: NodeJS.Timeout | null = null;
-
-      // Set a timeout to prevent infinite loading
-      timeoutId = setTimeout(() => {
-        console.log('Response timeout - stopping stream processing');
-        setIsTyping(false);
-        
-        const errorContent = 'Response timeout. Please try again.';
-        setTabStates(prev => ({
-          ...prev,
-          [activeTab]: {
-            ...prev[activeTab],
-            messages: prev[activeTab].messages.map(msg =>
-              msg.id === tempAssistantId
-                ? { ...msg, content: errorContent, isStreaming: false }
-                : msg
-            )
-          }
-        }));
-      }, 30000); // 30 second timeout
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) {
-            console.log('Stream done, hasReceivedData:', hasReceivedData);
-            break;
-          }
-
-          hasReceivedData = true;
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = null;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-
-            console.log('Processing streaming line:', trimmed);
-
-            if (trimmed.startsWith('data: ')) {
-              const data = trimmed.slice(6);
+            try {
+              const parsed = JSON.parse(data);
               
-              if (data === '[DONE]') {
-                console.log('Received [DONE] signal - completing stream');
-                setIsTyping(false);
+              if (parsed.token) {
+                accumulatedContent += parsed.token;
                 
                 setTabStates(prev => ({
                   ...prev,
@@ -718,129 +690,37 @@ export const ReportChatInterface: React.FC = () => {
                     ...prev[activeTab],
                     messages: prev[activeTab].messages.map(msg =>
                       msg.id === tempAssistantId
-                        ? { ...msg, isStreaming: false }
+                        ? { ...msg, content: accumulatedContent }
                         : msg
                     )
                   }
                 }));
-                
-                if (timeoutId) {
-                  clearTimeout(timeoutId);
-                  timeoutId = null;
-                }
-                return;
               }
-
-              try {
-                const parsed = JSON.parse(data);
-                console.log('Parsed streaming data:', parsed);
+              
+              if (parsed.chat_session_id && !newSessionId) {
+                newSessionId = parsed.chat_session_id;
                 
-                if (parsed.token) {
-                  streamedContent += parsed.token;
-                  
-                  setTabStates(prev => ({
-                    ...prev,
-                    [activeTab]: {
-                      ...prev[activeTab],
-                      messages: prev[activeTab].messages.map(msg =>
-                        msg.id === tempAssistantId
-                          ? { ...msg, content: streamedContent }
-                          : msg
-                      )
-                    }
-                  }));
-                } else if (parsed.content) {
-                  // Handle complete content response
-                  streamedContent = parsed.content;
-                  
-                  setTabStates(prev => ({
-                    ...prev,
-                    [activeTab]: {
-                      ...prev[activeTab],
-                      messages: prev[activeTab].messages.map(msg =>
-                        msg.id === tempAssistantId
-                          ? { ...msg, content: streamedContent }
-                          : msg
-                      )
-                    }
-                  }));
-                } else if (parsed.type === 'user_message_stored') {
-                  // Acknowledge user message stored
-                  console.log('User message stored confirmation:', parsed.message_id);
-                } else if (parsed.type === 'progress') {
-                  // Handle progress updates
-                  console.log('AI progress:', parsed.message);
-                }
-                
-                if (parsed.chat_session_id && !newSessionId) {
-                  newSessionId = parsed.chat_session_id;
-                  
-                  setTabStates(prev => ({
-                    ...prev,
-                    [activeTab]: {
-                      ...prev[activeTab],
-                      sessionId: newSessionId
-                    }
-                  }));
-                }
-                
-                if (parsed.error) {
-                  throw new Error(parsed.error);
-                }
-              } catch (parseError) {
-                console.warn('Failed to parse streaming data:', trimmed, parseError);
-                // Don't break the stream for parsing errors
-                continue;
+                setTabStates(prev => ({
+                  ...prev,
+                  [activeTab]: {
+                    ...prev[activeTab],
+                    sessionId: newSessionId
+                  }
+                }));
               }
+              
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+            } catch (parseError) {
+              console.warn('Parse error (continuing):', parseError.message);
             }
           }
-        }
-      } finally {
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        
-        // CRITICAL FIX: Always ensure typing indicator stops and message is finalized
-        console.log('Stream completed, finalizing message state');
-        
-        setIsTyping(false);
-        
-        // Ensure the message is marked as complete
-        setTabStates(prev => ({
-          ...prev,
-          [activeTab]: {
-            ...prev[activeTab],
-            messages: prev[activeTab].messages.map(msg =>
-              msg.id === tempAssistantId
-                ? { ...msg, isStreaming: false, content: streamedContent || msg.content }
-                : msg
-            )
-          }
-        }));
-        
-        // If no data was received, show error
-        if (!hasReceivedData || !streamedContent) {
-          console.log('No valid response received from stream');
-          
-          const errorContent = 'No response received from the server. Please try again.';
-          setTabStates(prev => ({
-            ...prev,
-            [activeTab]: {
-              ...prev[activeTab],
-              messages: prev[activeTab].messages.map(msg =>
-                msg.id === tempAssistantId
-                  ? { ...msg, content: errorContent, isStreaming: false }
-                  : msg
-              )
-            }
-          }));
         }
       }
-    } catch (error) {
-      console.error('Error sending message:', error);
+    } finally {
+      // Ensure the message is always finalized
       setIsTyping(false);
-      
-      const errorContent = `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`;
       
       setTabStates(prev => ({
         ...prev,
@@ -848,86 +728,67 @@ export const ReportChatInterface: React.FC = () => {
           ...prev[activeTab],
           messages: prev[activeTab].messages.map(msg =>
             msg.id === tempAssistantId
-              ? { ...msg, content: errorContent, isStreaming: false }
+              ? { ...msg, isStreaming: false, content: accumulatedContent || msg.content || 'Response completed' }
               : msg
           )
         }
       }));
     }
+  };
 
-    // ADDITIONAL FIX: Backup mechanism to check message completion after 5 seconds
-    setTimeout(() => {
-      setTabStates(prev => {
-        const currentMessage = prev[activeTab].messages.find(msg => msg.id === tempAssistantId);
+  // Handle non-streaming responses
+  const processNonStreamingResponse = async (response: Response, tempAssistantId: string) => {
+    try {
+      const data = await response.json();
+      console.log('Non-streaming response received:', data);
+      
+      if (data.success && data.messages && Array.isArray(data.messages)) {
+        // Replace temporary messages with real ones from server
+        const realMessages = data.messages.map((msg: any) => ({
+          id: msg.id || `msg_${msg.messageOrder}_${Date.now()}`,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.timestamp),
+          isStreaming: false
+        }));
         
-        if (currentMessage && (currentMessage.isStreaming || !currentMessage.content)) {
-          console.log('Backup mechanism: Message still streaming after timeout, checking server...');
-          
-          // Try to fetch the latest messages from server as fallback
-          const serverUrl = import.meta.env.VITE_API_URL;
-          const currentSession = prev[activeTab].sessionId;
-          
-          if (currentSession) {
-            fetch(`${serverUrl}/api/chat-sessions/${currentSession}/messages`)
-              .then(r => r.json())
-              .then(data => {
-                const latestMessages = data.messages.map((msg: any) => ({
-                  id: msg.id || `msg_${msg.message_order}_${Date.now()}`,
-                  role: msg.role,
-                  content: msg.content,
-                  timestamp: new Date(msg.timestamp || msg.created_at),
-                  isStreaming: false
-                }));
-                
-                console.log('Backup: Retrieved latest messages from server:', latestMessages.length);
-                
-                setTabStates(prev => ({
-                  ...prev,
-                  [activeTab]: {
-                    ...prev[activeTab],
-                    messages: latestMessages
-                  }
-                }));
-                
-                setIsTyping(false);
-              })
-              .catch(err => {
-                console.error('Backup mechanism failed:', err);
-                setIsTyping(false);
-                
-                // Final fallback - just stop the loader
-                setTabStates(prev => ({
-                  ...prev,
-                  [activeTab]: {
-                    ...prev[activeTab],
-                    messages: prev[activeTab].messages.map(msg =>
-                      msg.id === tempAssistantId
-                        ? { ...msg, content: 'Response completed. Please refresh if you don\'t see the message.', isStreaming: false }
-                        : msg
-                    )
-                  }
-                }));
-              });
-          } else {
-            // No session ID, just stop the loader
-            setIsTyping(false);
-            setTabStates(prev => ({
-              ...prev,
-              [activeTab]: {
-                ...prev[activeTab],
-                messages: prev[activeTab].messages.map(msg =>
-                  msg.id === tempAssistantId
-                    ? { ...msg, content: 'Response may have completed. Please refresh to see the latest messages.', isStreaming: false }
-                    : msg
-                )
-              }
-            }));
+        setTabStates(prev => ({
+          ...prev,
+          [activeTab]: {
+            ...prev[activeTab],
+            messages: [...prev[activeTab].messages.slice(0, -2), ...realMessages],
+            sessionId: data.chat_session_id
           }
-        }
+        }));
         
-        return prev;
-      });
-    }, 10000); // 10 second backup timeout
+        console.log('Updated UI with real messages from server');
+      }
+      
+      setIsTyping(false);
+      
+    } catch (parseError) {
+      console.error('Error parsing non-streaming response:', parseError);
+      throw parseError;
+    }
+  };
+
+  // Handle message errors
+  const handleMessageError = (tempAssistantId: string, error: any) => {
+    setIsTyping(false);
+    
+    const errorContent = `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again.`;
+    
+    setTabStates(prev => ({
+      ...prev,
+      [activeTab]: {
+        ...prev[activeTab],
+        messages: prev[activeTab].messages.map(msg =>
+          msg.id === tempAssistantId
+            ? { ...msg, content: errorContent, isStreaming: false }
+            : msg
+        )
+      }
+    }));
   };
 
   const handleFollowUpClick = (question: string) => {
@@ -961,7 +822,7 @@ export const ReportChatInterface: React.FC = () => {
     setError('');
     setIsTyping(false);
     
-    // CRITICAL FIX: Update URL parameters when tab changes
+    // Update URL parameters when tab changes
     if (purchaseId) {
       const newSearchParams = new URLSearchParams();
       newSearchParams.set('purchase_id', purchaseId);
@@ -1014,7 +875,7 @@ export const ReportChatInterface: React.FC = () => {
     }
   }, [messages, activeTab, currentSessionId]);
 
-  // LOADING STATE - Only show if we're actually initializing
+  // LOADING STATE - Only show if we're actually initializing AND don't have restored state
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -1028,7 +889,11 @@ export const ReportChatInterface: React.FC = () => {
     );
   }
 
-  if (isLoading && !hasInitialized.current) {
+  // Don't show loading if we have any messages to display
+  const hasAnyMessages = tabStates.marketing.messages.length > 0 || tabStates.website.messages.length > 0;
+  const shouldShowLoading = isLoading && !hasInitialized.current && !hasAnyMessages;
+
+  if (shouldShowLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -1138,12 +1003,12 @@ export const ReportChatInterface: React.FC = () => {
             </button>
           </div>
 
-          <button
+          {/* <button
             onClick={startNewChat}
             className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             + New Chat
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -1196,7 +1061,7 @@ export const ReportChatInterface: React.FC = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Suggested Questions - Show after welcome message */}
+          {/* Suggested Questions */}
           {currentTabState.followUpQuestions.length > 0 && messages.length <= 1 && !isTyping && (
             <div className="px-6 py-4 border-t border-gray-200">
               <p className="text-sm text-gray-600 mb-3">Try asking:</p>

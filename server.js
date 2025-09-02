@@ -1287,71 +1287,160 @@ app.use((error, req, res, next) => {
   });
 });
 
-// ============================================
-// COMPLETE API ENDPOINTS FOR DUAL-REPORT CHAT SYSTEM
-// Paste this entire section into your Express.js server
-// ============================================
-
-// Helper Functions (Add these first)
-
-// Marketing Report Context Formatter
 function formatMarketingReportContext(reportData) {
   try {
-    let contextText = '';
-    
     if (typeof reportData === 'string') return reportData;
     
+    let contextText = 'MARKETING AUDIT DATA:\n\n';
+    
     if (typeof reportData === 'object') {
-      // Executive Summary
-      if (reportData["1. 🚀 Executive Summary"]) {
-        const exec = reportData["1. 🚀 Executive Summary"];
-        contextText += `=== MARKETING AUDIT OVERVIEW ===\n`;
-        contextText += `Business: ${exec["Business Overview"]}\n\n`;
-        contextText += `Strategic Importance: ${exec["Why This Matters"]}\n\n`;
-        
-        contextText += `KEY STRENGTHS:\n${exec["Top 3 Key Strengths"]?.map((s, i) => `${i+1}. ${s}`).join('\n')}\n\n`;
-        contextText += `CRITICAL GAPS:\n${exec["Top 3 Key Concerns/Gaps"]?.map((g, i) => `${i+1}. ${g}`).join('\n')}\n\n`;
+      // Overall Score
+      if (reportData.overall_score) {
+        contextText += `OVERALL MARKETING SCORE: ${reportData.overall_score}/100\n\n`;
       }
       
-      // Red Flags
-      if (reportData["3. 🚨 Red Flags (Risk Areas)"]) {
-        contextText += `=== CRITICAL ISSUES ===\n`;
-        reportData["3. 🚨 Red Flags (Risk Areas)"].forEach((flag, i) => {
-          contextText += `${i+1}. ${flag.Title} [${flag.Severity.toUpperCase()}]\n   ${flag.Description}\n\n`;
-        });
-      }
+      // Key sections from marketing audit
+      Object.keys(reportData).forEach(key => {
+        if (typeof reportData[key] === 'object' && reportData[key] !== null) {
+          contextText += `${key.toUpperCase()}:\n`;
+          if (Array.isArray(reportData[key])) {
+            reportData[key].forEach((item, i) => {
+              contextText += `${i+1}. ${typeof item === 'object' ? JSON.stringify(item) : item}\n`;
+            });
+          } else {
+            contextText += `${JSON.stringify(reportData[key], null, 2)}\n`;
+          }
+          contextText += '\n';
+        }
+      });
       
-      // Opportunities
-      if (reportData["4. 💡 Top 5 Opportunity Areas"]) {
-        contextText += `=== GROWTH OPPORTUNITIES ===\n`;
-        reportData["4. 💡 Top 5 Opportunity Areas"].forEach((opp, i) => {
-          contextText += `${i+1}. ${opp.Title} [Effort: ${opp["Effort Level"]} | Impact: ${opp["Impact Potential"]}]\n   ${opp.Description}\n\n`;
-        });
-      }
-      
-      // Action Plan
-      if (reportData["5. 🧭 Action Plan: 30/90/365 Days"]) {
-        const plan = reportData["5. 🧭 Action Plan: 30/90/365 Days"];
-        contextText += `=== IMPLEMENTATION TIMELINE ===\n`;
+      // Growth Plan
+      if (reportData["5. 📈 Growth & Scaling Plan"]) {
+        contextText += `GROWTH PLAN:\n`;
+        const plan = reportData["5. 📈 Growth & Scaling Plan"];
         if (plan["30 Days"]) contextText += `30-Day Actions:\n${plan["30 Days"].map((a, i) => `${i+1}. ${a}`).join('\n')}\n\n`;
         if (plan["90 Days"]) contextText += `90-Day Goals:\n${plan["90 Days"].map((g, i) => `${i+1}. ${g}`).join('\n')}\n\n`;
         if (plan["365 Days"]) contextText += `1-Year Vision:\n${plan["365 Days"].map((v, i) => `${i+1}. ${v}`).join('\n')}\n\n`;
       }
       
-      // Tools
+      // Tools Recommendations
       if (reportData["7. 🛠 Tool & Tactic Recommendations"]) {
-        contextText += `=== RECOMMENDED TOOLS ===\n`;
+        contextText += `RECOMMENDED TOOLS:\n`;
         reportData["7. 🛠 Tool & Tactic Recommendations"].forEach((tool, i) => {
           contextText += `${i+1}. ${tool["Tool Name"]} (${tool.Category}) - ${tool["Why It Fits"]}\n`;
         });
+        contextText += '\n';
+      }
+    }
+    
+    return contextText;
+  } catch (error) {
+    console.error('Error formatting marketing context:', error);
+    return JSON.stringify(reportData, null, 2);
+  }
+
+  try {
+    if (typeof websiteData === 'string') {
+      return websiteData;
+    }
+    
+    let contextText = 'WEBSITE ANALYSIS DATA:\n\n';
+    
+    if (typeof websiteData === 'object') {
+      // Overall Score and Status
+      if (websiteData.score) {
+        contextText += `OVERALL WEBSITE SCORE: ${websiteData.score.value}/100 (${websiteData.score.status})\n`;
+        if (websiteData.score.description) {
+          contextText += `Assessment: ${websiteData.score.description}\n`;
+        }
         contextText += `\n`;
       }
       
-      // Social Media Performance
-      if (reportData["6. 📲 Social Channel Performance Overview"]) {
-        contextText += `=== SOCIAL MEDIA PERFORMANCE ===\n`;
-        Object.entries(reportData["6. 📲 Social Channel Performance Overview"]).forEach(([platform, data]) => {
-          contextText += `${platform}: Score ${data.Score}/100 (${data.Status})\n`;
+      // Analysis Categories
+      if (websiteData.analysis) {
+        const analysis = websiteData.analysis;
+        
+        if (analysis.content_quality && analysis.content_quality.length > 0) {
+          contextText += `CONTENT QUALITY ISSUES:\n`;
+          analysis.content_quality.forEach((issue, i) => {
+            contextText += `${i+1}. ${issue}\n`;
+          });
+          contextText += `\n`;
+        }
+        
+        if (analysis.seo_discoverability && analysis.seo_discoverability.length > 0) {
+          contextText += `SEO & DISCOVERABILITY ISSUES:\n`;
+          analysis.seo_discoverability.forEach((issue, i) => {
+            contextText += `${i+1}. ${issue}\n`;
+          });
+          contextText += `\n`;
+        }
+        
+        if (analysis.branding_consistency && analysis.branding_consistency.length > 0) {
+          contextText += `BRANDING & CONSISTENCY ISSUES:\n`;
+          analysis.branding_consistency.forEach((issue, i) => {
+            contextText += `${i+1}. ${issue}\n`;
+          });
+          contextText += `\n`;
+        }
+        
+        if (analysis.conversion_readiness && analysis.conversion_readiness.length > 0) {
+          contextText += `CONVERSION & CRO ISSUES:\n`;
+          analysis.conversion_readiness.forEach((issue, i) => {
+            contextText += `${i+1}. ${issue}\n`;
+          });
+          contextText += `\n`;
+        }
+
+        if (analysis.user_experience && analysis.user_experience.length > 0) {
+          contextText += `USER EXPERIENCE ISSUES:\n`;
+          analysis.user_experience.forEach((issue, i) => {
+            contextText += `${i+1}. ${issue}\n`;
+          });
+          contextText += `\n`;
+        }
+
+        if (analysis.technical_performance && analysis.technical_performance.length > 0) {
+          contextText += `TECHNICAL PERFORMANCE ISSUES:\n`;
+          analysis.technical_performance.forEach((issue, i) => {
+            contextText += `${i+1}. ${issue}\n`;
+          });
+          contextText += `\n`;
+        }
+      }
+      
+      // Priority Roadmap
+      if (websiteData.priority_roadmap) {
+        contextText += `PRIORITY IMPROVEMENT ROADMAP:\n`;
+        
+        if (websiteData.priority_roadmap["30_days"] && websiteData.priority_roadmap["30_days"].length > 0) {
+          contextText += `\n30-Day Priority Fixes:\n`;
+          websiteData.priority_roadmap["30_days"].forEach((task, i) => {
+            contextText += `${i+1}. ${task}\n`;
+          });
+        }
+        
+        if (websiteData.priority_roadmap["60_days"] && websiteData.priority_roadmap["60_days"].length > 0) {
+          contextText += `\n60-Day Improvements:\n`;
+          websiteData.priority_roadmap["60_days"].forEach((task, i) => {
+            contextText += `${i+1}. ${task}\n`;
+          });
+        }
+
+        if (websiteData.priority_roadmap["90_days"] && websiteData.priority_roadmap["90_days"].length > 0) {
+          contextText += `\n90-Day Strategic Goals:\n`;
+          websiteData.priority_roadmap["90_days"].forEach((task, i) => {
+            contextText += `${i+1}. ${task}\n`;
+          });
+        }
+        contextText += `\n`;
+      }
+
+      // Recommendations
+      if (websiteData.recommendations && websiteData.recommendations.length > 0) {
+        contextText += `KEY RECOMMENDATIONS:\n`;
+        websiteData.recommendations.forEach((rec, i) => {
+          contextText += `${i+1}. ${rec}\n`;
         });
         contextText += `\n`;
       }
@@ -1359,7 +1448,8 @@ function formatMarketingReportContext(reportData) {
     
     return contextText;
   } catch (error) {
-    return JSON.stringify(reportData, null, 2);
+    console.error('Error formatting website analysis context:', error);
+    return JSON.stringify(websiteData, null, 2);
   }
 }
 
@@ -1474,17 +1564,15 @@ function formatWebsiteAnalysisContext(websiteData) {
   }
 }
 
-
-
-// Token Limit Management
 const checkTokenLimit = async (threadId) => {
   try {
     const messages = await openai.beta.threads.messages.list(threadId, { limit: 100 });
     const estimatedTokens = messages.data
       .map(msg => msg.content[0]?.text?.value || '')
       .join(' ')
-      .length / 4;
+      .length / 4; // Rough estimation: 4 characters = 1 token
 
+    console.log(`Thread ${threadId} estimated tokens: ${estimatedTokens}`);
     return estimatedTokens > 25000; // Rotate before hitting 32k limit
   } catch (error) {
     console.error('Error checking token limit:', error);
@@ -1525,9 +1613,10 @@ Provide a concise summary in 2-3 paragraphs for continuing the conversation.`
   }
 };
 
-// Thread Rotation with Report Type Support
 const rotateThreadWithReportType = async (oldThreadId, reportData, sessionId, reportType) => {
   try {
+    console.log(`Rotating thread for ${reportType} session ${sessionId}`);
+    
     const messages = await openai.beta.threads.messages.list(oldThreadId, { limit: 20 });
     const summary = await createConversationSummary(messages.data);
     
@@ -1559,6 +1648,169 @@ I have full context of our previous discussion and your ${reportType} analysis. 
   }
 };
 
+const pollAndStreamV4 = async (res, threadId, runId, sessionId, messageOrder) => {
+  let attempts = 0;
+  const maxAttempts = 60;
+  
+  console.log(`V4 streaming: Starting for session ${sessionId}`);
+  
+  try {
+    while (attempts < maxAttempts) {
+      const runStatus = await openai.beta.threads.runs.retrieve(threadId, runId);
+      console.log(`V4 stream attempt ${attempts + 1}: ${runStatus.status}`);
+      
+      if (runStatus.status === 'completed') {
+        console.log('V4 streaming: Run completed successfully');
+        
+        const messages = await openai.beta.threads.messages.list(threadId, {
+          order: 'desc',
+          limit: 1
+        });
+        
+        const aiResponse = messages.data[0]?.content[0]?.text?.value || 'No response generated';
+        
+        console.log(`V4 streaming: AI response length: ${aiResponse.length}`);
+        
+        if (aiResponse.length === 0) {
+          throw new Error('Empty response from AI');
+        }
+        
+        // Stream response in chunks preserving formatting
+        const chunkSize = 100;
+        let sentLength = 0;
+        
+        while (sentLength < aiResponse.length) {
+          let endIndex = Math.min(sentLength + chunkSize, aiResponse.length);
+          
+          // Find natural break points to preserve formatting
+          if (endIndex < aiResponse.length) {
+            const breakPoints = ['\n\n', '\n', '. ', '? ', '! ', ': ', ', '];
+            for (const breakPoint of breakPoints) {
+              const lastBreak = aiResponse.lastIndexOf(breakPoint, endIndex);
+              if (lastBreak > sentLength) {
+                endIndex = lastBreak + breakPoint.length;
+                break;
+              }
+            }
+          }
+          
+          const chunk = aiResponse.substring(sentLength, endIndex);
+          res.write(`data: ${JSON.stringify({ token: chunk })}\n\n`);
+          
+          sentLength = endIndex;
+          await new Promise(resolve => setTimeout(resolve, 25));
+        }
+        
+        // Store AI response in database
+        const { data: storedAiMessage, error: aiMessageError } = await supabase
+          .from('chat_messages')
+          .insert({
+            chat_session_id: sessionId,
+            thread_id: threadId,
+            role: 'assistant',
+            content: aiResponse,
+            message_order: messageOrder,
+            metadata: { 
+              ai_generated: true, 
+              run_id: runId,
+              response_length: aiResponse.length,
+              api_version: 'v4'
+            }
+          })
+          .select()
+          .single();
+
+        if (aiMessageError) {
+          console.error('V4 streaming: Error storing AI message:', aiMessageError);
+        } else {
+          console.log('V4 streaming: AI message stored successfully:', storedAiMessage.id);
+        }
+        
+        // Send completion signal
+        console.log('V4 streaming: Sending [DONE] signal');
+        res.write('data: [DONE]\n\n');
+        
+        try {
+          res.end();
+        } catch (endError) {
+          console.log('V4 streaming: Response already ended');
+        }
+        
+        return;
+        
+      } else if (runStatus.status === 'failed') {
+        const errorMessage = runStatus.last_error?.message || 'OpenAI run failed';
+        console.error('V4 streaming: Run failed:', errorMessage);
+        throw new Error(errorMessage);
+        
+      } else if (runStatus.status === 'cancelled' || runStatus.status === 'expired') {
+        console.error('V4 streaming: Run cancelled or expired');
+        throw new Error(`Request ${runStatus.status}`);
+        
+      } else if (runStatus.status === 'requires_action') {
+        console.log('V4 streaming: Run requires action, waiting...');
+        // Handle tool calls if your assistant uses them
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Send progress updates
+      if (attempts % 5 === 0) {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'progress', 
+          status: runStatus.status,
+          message: 'AI is processing your request...' 
+        })}\n\n`);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      attempts++;
+    }
+    
+    throw new Error('V4 streaming: Response timeout after 2 minutes');
+    
+  } catch (error) {
+    console.error('V4 streaming error:', error);
+    
+    // Store error message
+    try {
+      const errorResponse = `I apologize, but I encountered an error while processing your request: ${error.message}. Please try asking your question again.`;
+      
+      await supabase
+        .from('chat_messages')
+        .insert({
+          chat_session_id: sessionId,
+          thread_id: threadId,
+          role: 'assistant',
+          content: errorResponse,
+          message_order: messageOrder,
+          metadata: { 
+            error: true, 
+            error_details: error.message,
+            api_version: 'v4'
+          }
+        });
+        
+      // Stream error message
+      res.write(`data: ${JSON.stringify({ token: errorResponse })}\n\n`);
+    } catch (dbError) {
+      console.error('V4 streaming: Error storing error message:', dbError);
+    }
+    
+    res.write(`data: ${JSON.stringify({ 
+      type: 'error', 
+      error: error.message,
+      recoverable: true
+    })}\n\n`);
+    res.write('data: [DONE]\n\n');
+    
+    try {
+      res.end();
+    } catch (endError) {
+      console.log('V4 streaming: Response already ended');
+    }
+  }
+};
+
 // Poll for OpenAI Response Completion
 const pollForCompletion = async (threadId, runId) => {
   let attempts = 0;
@@ -1585,153 +1837,8 @@ const pollForCompletion = async (threadId, runId) => {
   throw new Error('Response timeout');
 };
 
-// ============================================
-// API ENDPOINTS
-// ============================================
 
-// 1. CREATE NEW CHAT SESSION
-app.post('/api/chat-sessions/create', async (req, res) => {
-  try {
-    const { purchase_id, initial_message, report_type = 'marketing' } = req.body;
 
-    if (!purchase_id || !initial_message) {
-      return res.status(400).json({
-        error: 'Missing required fields: purchase_id, initial_message'
-      });
-    }
-
-    console.log(`Creating new ${report_type} chat session for purchase: ${purchase_id}`);
-
-    // Get report data
-    const reportColumn = report_type === 'marketing' ? 'result_data' : 'website_analysis';
-    const assistantId = report_type === 'marketing' 
-      ? process.env.OPENAI_MARKETING_ASSISTANT_ID 
-      : process.env.OPENAI_WEBSITE_ASSISTANT_ID;
-
-    if (!assistantId) {
-      throw new Error(`Assistant ID not configured for ${report_type}`);
-    }
-
-    const { data: aiResult, error: aiError } = await supabase
-      .from('ai_results')
-      .select(reportColumn)
-      .eq('purchase_id', purchase_id)
-      .eq('status', 'completed')
-      .single();
-
-    if (aiError || !aiResult) {
-      throw new Error('Report data not found');
-    }
-
-    // Create chat session
-    const { data: chatSession, error: sessionError } = await supabase
-      .from('chat_sessions')
-      .insert({
-        purchase_id,
-        report_type,
-        assistant_id: assistantId,
-        session_name: `${report_type === 'marketing' ? 'Marketing' : 'Website'} Discussion - ${new Date().toLocaleDateString()}`
-      })
-      .select()
-      .single();
-
-    if (sessionError) {
-      throw sessionError;
-    }
-
-    // Create OpenAI thread
-    const thread = await openai.beta.threads.create();
-    const reportData = aiResult[reportColumn];
-    
-    const context = report_type === 'marketing' 
-      ? formatMarketingReportContext(reportData)
-      : formatWebsiteAnalysisContext(reportData);
-
-    const initialContext = `I'm your ${report_type} optimization expert. Here's your analysis:
-
-${context}
-
-User's question: ${initial_message}`;
-
-    await openai.beta.threads.messages.create(thread.id, {
-      role: 'user',
-      content: initialContext
-    });
-
-    // Get AI response
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: assistantId,
-      temperature: 0.4
-    });
-
-    const aiResponse = await pollForCompletion(thread.id, run.id);
-
-    // FIXED: Store messages WITHOUT filtering metadata that prevents display
-    const { data: storedMessages, error: messagesError } = await supabase
-      .from('chat_messages')
-      .insert([
-        {
-          chat_session_id: chatSession.id,
-          thread_id: thread.id,
-          role: 'user',
-          content: initial_message,
-          message_order: 1,
-          metadata: { 
-            report_type, 
-            user_initiated: true,
-            // REMOVED: is_initial: true - this was causing messages to be filtered out
-          }
-        },
-        {
-          chat_session_id: chatSession.id,
-          thread_id: thread.id,
-          role: 'assistant', 
-          content: aiResponse,
-          message_order: 2,
-          metadata: { 
-            report_type,
-            ai_generated: true
-            // REMOVED: is_initial_response: true - this was also problematic
-          }
-        }
-      ])
-      .select();
-
-    if (messagesError) {
-      console.error('Error storing messages:', messagesError);
-    } else {
-      console.log('Messages stored successfully:', storedMessages.length);
-    }
-
-    res.json({
-      success: true,
-      chat_session_id: chatSession.id,
-      report_type,
-      messages: [
-        { 
-          id: storedMessages?.[0]?.id || `user_${Date.now()}`,
-          role: 'user', 
-          content: initial_message, 
-          timestamp: new Date(), 
-          messageOrder: 1 
-        },
-        { 
-          id: storedMessages?.[1]?.id || `assistant_${Date.now()}`,
-          role: 'assistant', 
-          content: aiResponse, 
-          timestamp: new Date(), 
-          messageOrder: 2 
-        }
-      ]
-    });
-
-  } catch (error) {
-    console.error('Error creating chat session:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// 2. SEND MESSAGE TO EXISTING SESSION
 app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -1741,7 +1848,7 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    console.log(`Processing message for session: ${sessionId}, message length: ${message.length}`);
+    console.log(`Processing message for session: ${sessionId}, message: "${message}"`);
 
     // Get session info first
     const { data: chatSession, error: sessionError } = await supabase
@@ -1758,7 +1865,7 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
 
     console.log(`Session found: ${chatSession.report_type} type`);
 
-    // Get AI results separately using purchase_id
+    // Get AI results
     const { data: aiResults, error: aiError } = await supabase
       .from('ai_results')
       .select('result_data, website_analysis')
@@ -1771,7 +1878,7 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
       return res.status(404).json({ error: 'Report data not found' });
     }
 
-    // Validate that we have the right data for the report type
+    // Get the appropriate report data
     const reportData = chatSession.report_type === 'marketing' 
       ? aiResults.result_data 
       : aiResults.website_analysis;
@@ -1783,7 +1890,7 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
       });
     }
 
-    console.log(`Found ${chatSession.report_type} data, keys:`, Object.keys(reportData));
+    console.log(`Found ${chatSession.report_type} data, processing...`);
 
     // Get current conversation state
     const { data: latestMessage } = await supabase
@@ -1796,21 +1903,139 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
     const nextOrder = (latestMessage?.[0]?.message_order || 0) + 1;
     let currentThreadId = latestMessage?.[0]?.thread_id;
 
-    // Handle token limit management
-    if (currentThreadId) {
-      const shouldRotate = await checkTokenLimit(currentThreadId);
-      if (shouldRotate) {
-        console.log(`Rotating thread for ${chatSession.report_type} session ${sessionId}`);
-        currentThreadId = await rotateThreadWithReportType(
-          currentThreadId, 
-          reportData, 
-          sessionId, 
-          chatSession.report_type
-        );
+    // Create thread if this is the first message
+    if (!currentThreadId) {
+      console.log('No existing thread found, creating new OpenAI thread');
+      
+      try {
+        const thread = await openai.beta.threads.create();
+        currentThreadId = thread.id;
+        console.log('Created new thread:', currentThreadId);
+      } catch (threadError) {
+        console.error('Error creating OpenAI thread:', threadError);
+        return res.status(500).json({ error: 'Failed to create conversation thread' });
+      }
+    } else {
+      // Check token limit for existing threads to prevent hitting OpenAI limits
+      try {
+        const shouldRotate = await checkTokenLimit(currentThreadId);
+        if (shouldRotate) {
+          console.log(`Token limit reached, rotating thread for ${chatSession.report_type} session ${sessionId}`);
+          currentThreadId = await rotateThreadWithReportType(
+            currentThreadId, 
+            reportData, 
+            sessionId, 
+            chatSession.report_type
+          );
+        }
+      } catch (tokenError) {
+        console.warn('Token limit check failed, continuing with existing thread:', tokenError.message);
       }
     }
 
-    // Store user message BEFORE processing AI response
+    // ENHANCED CONTEXT DETECTION: Better intent analysis
+    const detectMessageIntent = (msg) => {
+      const trimmed = msg.trim().toLowerCase();
+      
+      // Simple greetings and acknowledgments - exact matches only
+      const simplePatterns = [
+        /^(hi|hello|hey)$/,
+        /^(thanks?( you)?|thank you)$/,
+        /^(ok|okay|got it|understood|alright)$/,
+        /^(yes|no|yep|nope|sure)$/,
+        /^(good|great|nice|awesome|perfect|cool)$/,
+        /^(bye|goodbye|see you|talk later)$/
+      ];
+      
+      // Check if it's a simple greeting/acknowledgment
+      if (simplePatterns.some(pattern => pattern.test(trimmed))) {
+        return 'greeting';
+      }
+      
+      // Business/strategy question indicators - these always get full context
+      const businessIndicators = [
+        'what', 'how', 'when', 'where', 'why', 'which', 'who',
+        'should i', 'can i', 'could i', 'would you', 'do you recommend',
+        'help me', 'advice', 'suggest', 'recommend', 'think about',
+        'improve', 'fix', 'optimize', 'increase', 'boost', 'grow',
+        'strategy', 'plan', 'budget', 'roi', 'revenue', 'profit',
+        'conversion', 'traffic', 'leads', 'customers', 'sales',
+        'seo', 'marketing', 'website', 'brand', 'content', 'social media',
+        'analytics', 'performance', 'results', 'metrics', 'kpi',
+        'competitor', 'audience', 'target', 'campaign', 'ad', 'advertising',
+        'email', 'newsletter', 'blog', 'landing page', 'funnel'
+      ];
+      
+      const hasBusinessIndicator = businessIndicators.some(indicator => 
+        trimmed.includes(indicator)
+      );
+      
+      // Has question mark = likely a real question
+      const isQuestion = trimmed.includes('?');
+      
+      // Longer messages are usually substantive
+      const isLongMessage = trimmed.length > 15;
+      
+      // Command-like requests (imperative mood)
+      const commandPatterns = [
+        /^(tell me|show me|explain|give me|provide|create|make|build)/,
+        /^(analyze|review|assess|evaluate|check|look at)/
+      ];
+      
+      const isCommand = commandPatterns.some(pattern => pattern.test(trimmed));
+      
+      if (hasBusinessIndicator || isQuestion || isLongMessage || isCommand) {
+        return 'substantive';
+      }
+      
+      // For very short unclear messages, be conversational
+      return 'conversational';
+    };
+
+    const messageIntent = detectMessageIntent(message);
+    console.log(`Message intent detected: ${messageIntent} for message: "${message}"`);
+    
+    let messageToSend;
+    let instructions;
+    
+    if (messageIntent === 'greeting') {
+      // Pure greetings - minimal context
+      messageToSend = `You are a friendly ${chatSession.report_type} optimization expert helping a client named ${aiResults.company_name || 'the user'}. 
+      
+User message: ${message}
+
+Please respond naturally and conversationally. Ask how you can help with their ${chatSession.report_type} strategy today.`;
+
+      instructions = "Be friendly and conversational. Ask how you can help with their strategy.";
+      
+    } else if (messageIntent === 'conversational') {
+      // Conversational but not greeting - light context with basic info
+      messageToSend = `You are a ${chatSession.report_type} optimization expert. You've been helping a client named ${aiResults.company_name || 'the user'} with their ${chatSession.report_type} strategy. You have access to their detailed analysis data.
+      
+User message: ${message}
+
+Please respond conversationally. If they seem to want specific advice, ask what aspect of their ${chatSession.report_type} they'd like to discuss, or offer to look at their analysis data.`;
+
+      instructions = "Be conversational and helpful. If they want specific advice, offer to analyze their data.";
+      
+    } else {
+      // Substantive questions - full context
+      const context = chatSession.report_type === 'marketing' 
+        ? formatMarketingReportContext(reportData)
+        : formatWebsiteAnalysisContext(reportData);
+
+      messageToSend = `You are a ${chatSession.report_type} optimization expert. Here's the client's complete analysis:
+
+${context}
+
+User question: ${message}
+
+Please provide specific, actionable advice based on the analysis data above. Format your response with ### headers, **bold text**, and numbered lists for clarity.`;
+
+      instructions = `Provide detailed, well-formatted advice with clear structure. Use ### for headers, **bold** for emphasis, and numbered lists for steps. Reference specific data from their ${chatSession.report_type} analysis.`;
+    }
+
+    // Store user message with valid thread_id
     const { data: storedUserMessage, error: userMessageError } = await supabase
       .from('chat_messages')
       .insert({
@@ -1822,6 +2047,8 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
         metadata: { 
           user_initiated: true,
           report_type: chatSession.report_type,
+          message_intent: messageIntent,
+          context_level: messageIntent === 'greeting' ? 'minimal' : messageIntent === 'conversational' ? 'light' : 'full',
           message_length: message.length
         }
       })
@@ -1833,48 +2060,47 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
       return res.status(500).json({ error: 'Failed to store user message' });
     }
 
-    console.log('User message stored successfully:', storedUserMessage.id);
+    console.log(`User message stored with ${messageIntent} intent:`, storedUserMessage.id);
 
-    // Set up streaming response with proper headers
+    // Set up streaming response
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Headers': 'Content-Type',
-      'X-Accel-Buffering': 'no' // Disable nginx buffering
+      'X-Accel-Buffering': 'no'
     });
 
-    // Send initial confirmation that user message was stored
     res.write(`data: ${JSON.stringify({ 
       type: 'user_message_stored', 
       message_id: storedUserMessage.id,
       chat_session_id: sessionId,
-      report_type: chatSession.report_type
+      intent: messageIntent,
+      context_level: messageIntent === 'greeting' ? 'minimal' : messageIntent === 'conversational' ? 'light' : 'full'
     })}\n\n`);
 
     try {
-      // Process with OpenAI
+      // Send the contextually appropriate message to OpenAI
       await openai.beta.threads.messages.create(currentThreadId, {
         role: 'user',
-        content: message
+        content: messageToSend
       });
 
+      // Create run with appropriate instructions
       const run = await openai.beta.threads.runs.create(currentThreadId, {
         assistant_id: chatSession.assistant_id,
-        temperature: 0.4,
-        max_completion_tokens: 4000 // Ensure we don't hit token limits
+        instructions: instructions
       });
 
-      console.log(`OpenAI run created: ${run.id}`);
+      console.log(`OpenAI run created: ${run.id} (intent: ${messageIntent}, context: ${messageIntent === 'greeting' ? 'minimal' : messageIntent === 'conversational' ? 'light' : 'full'})`);
 
-      // Stream and store AI response with enhanced error handling
-      await pollAndStreamWithStorage(res, currentThreadId, run.id, sessionId, nextOrder + 1);
+      // Stream response
+      await pollAndStreamV4(res, currentThreadId, run.id, sessionId, nextOrder + 1);
 
     } catch (aiError) {
       console.error('Error processing AI response:', aiError);
       
-      // Send error response via stream
       res.write(`data: ${JSON.stringify({ 
         type: 'error', 
         error: 'Failed to generate AI response',
@@ -1896,7 +2122,6 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     } else {
-      // Send error via stream if headers already sent
       res.write(`data: ${JSON.stringify({ 
         type: 'error', 
         error: error.message,
@@ -1906,6 +2131,8 @@ app.post('/api/chat-sessions/:sessionId/message', async (req, res) => {
     }
   }
 });
+
+
 
 // 3. GET CHAT HISTORY (UNIFIED ACROSS ALL THREADS)
 app.get('/api/chat-sessions/:sessionId/messages', async (req, res) => {
